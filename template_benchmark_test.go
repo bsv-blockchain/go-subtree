@@ -3,7 +3,7 @@ package template_test
 import (
 	"testing"
 
-	"github.com/bsv-blockchain/go-template"
+	"github.com/bsv-blockchain/go-subtree"
 )
 
 // BenchmarkGreet benchmarks the Greet function.

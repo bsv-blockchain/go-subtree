@@ -1,4 +1,4 @@
-module github.com/bsv-blockchain/go-template
+module github.com/bsv-blockchain/go-subtree
 
 go 1.24
 
