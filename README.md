@@ -297,9 +297,16 @@ make bench
 
 ### Benchmark Results
 
-| Benchmark                           | Iterations | ns/op | B/op | allocs/op |
-|-------------------------------------|------------|------:|-----:|----------:|
-| [Greet](template_benchmark_test.go) | 21,179,739 | 56.59 |   40 |         2 |
+| Benchmark Name                     |  Iterations |      ns/op |       B/op | allocs/op |
+|------------------------------------|------------:|-----------:|-----------:|----------:|
+| NewTxInpoints                      |   4,245,616 |      300.7 |        644 |         3 |
+| Subtree_Deserialize                |          13 | 85,003,877 | 67,109,206 |         9 |
+| Subtree_DeserializeNodesFromReader |          13 | 82,279,602 | 50,331,666 |         2 |
+| Subtree_DeserializeFromReader      |          14 | 82,479,347 | 67,108,952 |         7 |
+| SubtreeNodeIndex                   |   2,659,832 |      440.5 |         45 |         1 |
+| Subtree_AddNode                    | 135,712,501 |      11.85 |          0 |         0 |
+| Subtree_Serialize                  |  36,528,111 |      46.54 |        155 |         0 |
+| Subtree_SerializeNodes             | 100,000,000 |      10.94 |         32 |         0 |
 
 > These benchmarks reflect fast, allocation-free lookups for most retrieval functions, ensuring optimal performance in production environments.
 > Performance benchmarks for the core functions in this library, executed on an Apple M1 Max (ARM64).
