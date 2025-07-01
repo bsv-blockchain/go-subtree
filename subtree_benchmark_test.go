@@ -3,11 +3,12 @@ package subtree_test
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"testing"
+
 	"github.com/bsv-blockchain/go-subtree"
 	"github.com/libsv/go-bt/v2/chainhash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func BenchmarkSubtree_AddNode(b *testing.B) {
