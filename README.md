@@ -324,9 +324,9 @@ Edit `AGENTS.md` first when adjusting these policies, and keep the other files i
 <br/>
 
 ## 👥 Maintainers
-| [<img src="https://github.com/icellan.png" height="50" alt="Siggi" />](https://github.com/icellan) |
-|:--------------------------------------------------------------------------------------------------:|
-|                                [Siggi](https://github.com/icellan)                                 |
+| [<img src="https://github.com/icellan.png" height="50" alt="Siggi" />](https://github.com/icellan) | [<img src="https://github.com/ordishs.png" height="50" alt="Simon" />](https://github.com/ordishs) | [<img src="https://github.com/freemans13.png" height="50" alt="Stu" />](https://github.com/freemans13) | [<img src="https://github.com/liam.png" height="50" alt="Liam" />](https://github.com/liam) | [<img src="https://github.com/gokutheengineer.png" height="50" alt="Gokhan" />](https://github.com/gokutheengineer) |
+|:--------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------------:|
+|                                [Siggi](https://github.com/icellan)                                 |                                [Simon](https://github.com/ordishs)                                 |                                  [Stu](https://github.com/freemans13)                                  |                               [Liam](https://github.com/liam)                               |                                    [Gokhan](https://github.com/gokutheengineer)                                     |
 
 <br/>
 
@@ -344,4 +344,4 @@ You can also support this project by [becoming a sponsor on GitHub](https://gith
 
 ## 📝 License
 
-[![License](https://img.shields.io/github/license/bsv-blockchain/go-subtree.svg?style=flat&v=1)](LICENSE)
+[![License](https://img.shields.io/badge/license-OpenBSV-blue?style=flat&logo=springsecurity&logoColor=white)](LICENSE)
