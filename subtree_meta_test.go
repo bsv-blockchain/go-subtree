@@ -237,9 +237,9 @@ func TestSubtreeMetaGetTxInpoints(t *testing.T) {
 
 	t.Run("empty subtree", func(t *testing.T) {
 		subtree, _ := NewTreeByLeafCount(4)
-		subtreeMeta := NewSubtreeMeta(subtree)
+		emptySubtreeMeta := NewSubtreeMeta(subtree)
 
-		inpoints, err := subtreeMeta.GetTxInpoints(0)
+		inpoints, err := emptySubtreeMeta.GetTxInpoints(0)
 		require.NoError(t, err)
 
 		assert.Equal(t, 0, len(inpoints))

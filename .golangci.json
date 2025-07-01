@@ -47,13 +47,16 @@
       "gochecknoglobals",
       "gocritic",
       "godot",
+      "godox",
       "testifylint",
       "revive",
       "gochecknoinits",
       "forbidigo",
       "err113",
       "errorlint",
-      "gosec"
+      "gosec",
+      "unused",
+      "gomoddirectives"
     ],
     "enable": [
       "asasalint",

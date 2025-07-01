@@ -34,9 +34,7 @@ func NewTxInpoints() TxInpoints {
 
 func NewTxInpointsFromTx(tx *bt.Tx) (TxInpoints, error) {
 	p := NewTxInpoints()
-	if err := p.addTx(tx); err != nil {
-		return p, err
-	}
+	p.addTx(tx)
 
 	return p, nil
 }
@@ -47,9 +45,7 @@ func NewTxInpointsFromInputs(inputs []*bt.Input) (TxInpoints, error) {
 	tx := &bt.Tx{}
 	tx.Inputs = inputs
 
-	if err := p.addTx(tx); err != nil {
-		return p, err
-	}
+	p.addTx(tx)
 
 	return p, nil
 }
@@ -78,7 +74,7 @@ func (p *TxInpoints) String() string {
 	return fmt.Sprintf("TxInpoints{ParentTxHashes: %v, Idxs: %v}", p.ParentTxHashes, p.Idxs)
 }
 
-func (p *TxInpoints) addTx(tx *bt.Tx) error {
+func (p *TxInpoints) addTx(tx *bt.Tx) {
 	// Do not error out for transactions without inputs, seeded Teranodes will have txs without inputs
 
 	for _, input := range tx.Inputs {
@@ -94,8 +90,6 @@ func (p *TxInpoints) addTx(tx *bt.Tx) error {
 
 		p.nrInpoints++
 	}
-
-	return nil
 }
 
 // GetParentTxHashes returns the unique parent tx hashes

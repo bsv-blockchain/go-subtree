@@ -164,7 +164,7 @@ func TestGetMap(t *testing.T) {
 
 		// find node in original tree
 		originalIdx := st.NodeIndex(node.Hash)
-		assert.Equal(t, uint64(originalIdx), txIdx) // nolint:gosec
+		assert.Equal(t, uint64(originalIdx), txIdx) //nolint:gosec // Ignore for now
 	}
 }
 
