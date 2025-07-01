@@ -1,5 +1,5 @@
-github.com/bsv-blockchain/go-safe-conversion v0.0.0-20250701040542-ca4e7b9ca0da h1:WYjLgrUvgq1HjGcP1mU0aXPrqZ5l0UoDB/b9ssa/nxo=
-github.com/bsv-blockchain/go-safe-conversion v0.0.0-20250701040542-ca4e7b9ca0da/go.mod h1:Fmat8fhPfMrdGCGv9PZ+QOkpQutD61hssbaLto4+3ks=
+github.com/bsv-blockchain/go-safe-conversion v1.0.0 h1:5KVzKpCcuDVYDwuvAiP/9E4xe80CCvFuLY/nwtht7wc=
+github.com/bsv-blockchain/go-safe-conversion v1.0.0/go.mod h1:Fmat8fhPfMrdGCGv9PZ+QOkpQutD61hssbaLto4+3ks=
 github.com/bsv-blockchain/go-tx-map v1.0.0 h1:oeGI6et039crvzuELKHojYdlZwDNf+UCv9r1+63sZHE=
 github.com/bsv-blockchain/go-tx-map v1.0.0/go.mod h1:xCauj1rtF8dxuxP8WusegkFLzmcVCuLzcYZfjwXOi3Y=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -26,8 +26,8 @@ github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0t
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-golang.org/x/crypto v0.35.0 h1:b15kiHdrGCHrP6LvwaQ3c03kgNhhiMgvlhxHQhmg2Xs=
-golang.org/x/crypto v0.35.0/go.mod h1:dy7dXNW32cAb/6/PRuTNsix8T+vJAqvuIy5Bli/x0YQ=
+golang.org/x/crypto v0.39.0 h1:SHs+kF4LP+f+p14esP5jAoDpHU8Gu/v9lFRK6IT5imM=
+golang.org/x/crypto v0.39.0/go.mod h1:L+Xg3Wf6HoL4Bn4238Z6ft6KfEpN0tJGo53AAPC632U=
 golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b h1:M2rDM6z3Fhozi9O7NWsxAkg/yqS/lQJ6PmkyIV3YP+o=
 golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b/go.mod h1:3//PLf8L/X+8b4vuAfHzxeRUl04Adcb341+IGKfnqS8=
 google.golang.org/protobuf v1.36.6 h1:z1NpPI8ku2WgiWnf+t9wTPsn6eP1L7ksHUlkfLvd9xY=
