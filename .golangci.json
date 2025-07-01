@@ -51,7 +51,9 @@
       "revive",
       "gochecknoinits",
       "forbidigo",
-      "err113"
+      "err113",
+      "errorlint",
+      "gosec"
     ],
     "enable": [
       "asasalint",
