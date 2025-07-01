@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	safe "github.com/bsv-blockchain/go-safe-conversion"
-	txmap "github.com/bitcoin-sv/teranode/pkg/go-tx-map"
+	txmap "github.com/bsv-blockchain/go-tx-map"
 	"github.com/libsv/go-bt/v2/chainhash"
 )
 

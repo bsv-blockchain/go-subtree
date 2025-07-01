@@ -1,7 +1,17 @@
 package subtree_test
 
+import (
+	"crypto/rand"
+	"encoding/binary"
+	"github.com/bsv-blockchain/go-subtree"
+	"github.com/libsv/go-bt/v2/chainhash"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"testing"
+)
+
 func BenchmarkSubtree_AddNode(b *testing.B) {
-	st, err := NewIncompleteTreeByLeafCount(b.N)
+	st, err := subtree.NewIncompleteTreeByLeafCount(b.N)
 	require.NoError(b, err)
 
 	// create a slice of random hashes
@@ -23,7 +33,7 @@ func BenchmarkSubtree_AddNode(b *testing.B) {
 }
 
 func BenchmarkSubtree_Serialize(b *testing.B) {
-	st, err := NewIncompleteTreeByLeafCount(b.N)
+	st, err := subtree.NewIncompleteTreeByLeafCount(b.N)
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {
@@ -42,7 +52,7 @@ func BenchmarkSubtree_Serialize(b *testing.B) {
 }
 
 func BenchmarkSubtree_SerializeNodes(b *testing.B) {
-	st, err := NewIncompleteTreeByLeafCount(b.N)
+	st, err := subtree.NewIncompleteTreeByLeafCount(b.N)
 	require.NoError(b, err)
 
 	for i := 0; i < b.N; i++ {

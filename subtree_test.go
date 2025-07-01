@@ -2,8 +2,6 @@ package subtree
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"testing"
 
