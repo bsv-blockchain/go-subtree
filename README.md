@@ -1,5 +1,5 @@
 # 🚀 go-subtree
-> A Go library for managing Subtree structures in Bitcoin SV, enabling efficient handling of transaction inputs and outputs.
+> A Go library for efficiently managing Bitcoin SV Subtree transaction structures
 
 <table>
   <thead>
