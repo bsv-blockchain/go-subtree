@@ -58,7 +58,6 @@ delivery and open-source collaboration from day one.
 
 For more detailed guidance and supporting documentation, refer to the following project-level resources:
 
-* `CITATION.cff` — Metadata for citing this project; GitHub uses it to render citation information
 * `CODEOWNERS` - Ownership of the repository and various directories
 * `CODE_OF_CONDUCT.md` — Expected behavior and enforcement
 * `CODE_STANDARDS.md` — Style guides and best practices
@@ -747,8 +746,7 @@ This section tracks notable updates to `AGENTS.md`, including the date, author, 
 All contributors are expected to append entries here when making meaningful changes to agent behavior, conventions, or policies.
 
 
-| Date       | Author   | Summary of Changes                                           |
-|------------|----------|--------------------------------------------------------------|
-| 2025-06-30 | @mrz1836 | Added pre-commit hook guidelines and config reference        |
-| 2025-06-27 | @mrz1836 | Adapted to fix this project go-subtree                      |
+| Date       | Author   | Summary of Changes                     |
+|------------|----------|----------------------------------------|
+| 2025-07-01 | @mrz1836 | Adapted to fix this project go-subtree |
 > For minor edits (typos, formatting), this log update is optional. For all behavioral or structural changes, log entries are **required**.
