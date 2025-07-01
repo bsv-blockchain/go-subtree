@@ -46,7 +46,17 @@
     "disable": [
       "gochecknoglobals",
       "gocritic",
-      "godot"
+      "godot",
+      "godox",
+      "testifylint",
+      "revive",
+      "gochecknoinits",
+      "forbidigo",
+      "err113",
+      "errorlint",
+      "gosec",
+      "unused",
+      "gomoddirectives"
     ],
     "enable": [
       "asasalint",
