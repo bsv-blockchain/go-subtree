@@ -28,19 +28,17 @@ var (
 	FrozenBytesTxHash  = chainhash.Hash(FrozenBytesTxBytes)
 )
 
-var (
-	CoinbasePlaceholderTx     *bt.Tx
-	coinbasePlaceholderTxHash *chainhash.Hash
-)
-
-func init() {
-	CoinbasePlaceholderTx = bt.NewTx()
-	CoinbasePlaceholderTx.Version = 0xFFFFFFFF
-	CoinbasePlaceholderTx.LockTime = 0xFFFFFFFF
-
-	coinbasePlaceholderTxHash = CoinbasePlaceholderTx.TxIDChainHash()
+func generateCoinbasePlaceholderTx() *bt.Tx {
+	tx := bt.NewTx()
+	tx.Version = 0xFFFFFFFF
+	tx.LockTime = 0xFFFFFFFF
+	return tx
 }
 
+// IsCoinbasePlaceHolderTx checks if the given transaction is a coinbase placeholder transaction.
 func IsCoinbasePlaceHolderTx(tx *bt.Tx) bool {
+	coinbasePlaceholderTx := generateCoinbasePlaceholderTx()
+
+	coinbasePlaceholderTxHash := coinbasePlaceholderTx.TxIDChainHash()
 	return tx.TxIDChainHash().IsEqual(coinbasePlaceholderTxHash)
 }
