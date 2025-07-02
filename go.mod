@@ -3,9 +3,9 @@ module github.com/bsv-blockchain/go-subtree
 go 1.24
 
 require (
-	github.com/bsv-blockchain/go-safe-conversion v1.0.0
-	github.com/bsv-blockchain/go-tx-map v1.0.0
-	github.com/libsv/go-bt/v2 v2.2.5
+	github.com/bsv-blockchain/go-bt/v2 v2.3.0
+	github.com/bsv-blockchain/go-safe-conversion v1.0.1
+	github.com/bsv-blockchain/go-tx-map v1.0.2
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 )
@@ -21,5 +21,3 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/libsv/go-bt/v2 => github.com/ordishs/go-bt/v2 v2.2.22
