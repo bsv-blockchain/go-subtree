@@ -44,19 +44,16 @@
   },
   "linters": {
     "disable": [
-      "gochecknoglobals",
       "gocritic",
       "godot",
       "godox",
       "testifylint",
       "revive",
-      "gochecknoinits",
       "forbidigo",
       "err113",
       "errorlint",
       "gosec",
-      "unused",
-      "gomoddirectives"
+      "unused"
     ],
     "enable": [
       "asasalint",
