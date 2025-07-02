@@ -11,7 +11,7 @@ func TestCoinbasePlaceholderTx(t *testing.T) {
 	coinbasePlaceholderTx := generateCoinbasePlaceholderTx()
 	coinbasePlaceholderTxHash := coinbasePlaceholderTx.TxIDChainHash()
 	assert.True(t, IsCoinbasePlaceHolderTx(coinbasePlaceholderTx))
-	assert.Equal(t, coinbasePlaceholderTx.Version, uint32(0xFFFFFFFF))
+	assert.Equal(t, uint32(0xFFFFFFFF), coinbasePlaceholderTx.Version)
 	assert.Equal(t, coinbasePlaceholderTx.LockTime, uint32(0xFFFFFFFF))
 	assert.Equal(t, coinbasePlaceholderTx.TxIDChainHash(), coinbasePlaceholderTxHash)
 	assert.False(t, IsCoinbasePlaceHolderTx(bt.NewTx()))
