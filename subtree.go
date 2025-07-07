@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"sync"
 
@@ -14,12 +15,14 @@ import (
 	txmap "github.com/bsv-blockchain/go-tx-map"
 )
 
+// SubtreeNode represents a node in the subtree.
 type SubtreeNode struct {
 	Hash        chainhash.Hash `json:"txid"` // This is called txid so that the UI knows to add a link to /tx/<txid>
 	Fee         uint64         `json:"fee"`
 	SizeInBytes uint64         `json:"size"`
 }
 
+// Subtree represents a subtree in a Merkle tree structure.
 type Subtree struct {
 	Height           int
 	Fees             uint64
@@ -32,14 +35,15 @@ type Subtree struct {
 	rootHash *chainhash.Hash
 	treeSize int
 
-	//feeBytes []byte // unused, but kept for reference
+	// feeBytes []byte // unused, but kept for reference
 
-	//feeHashBytes []byte // unused, but kept for reference
+	// feeHashBytes []byte // unused, but kept for reference
 
 	mu        sync.RWMutex           // protects Nodes slice
 	nodeIndex map[chainhash.Hash]int // maps txid to index in Nodes slice
 }
 
+// TxMap is an interface for a map of transaction hashes to values.
 type TxMap interface {
 	Put(hash chainhash.Hash, value uint64) error
 	Get(hash chainhash.Hash) (uint64, bool)
@@ -56,7 +60,7 @@ func NewTree(height int) (*Subtree, error) {
 		return nil, fmt.Errorf("height must be at least 0")
 	}
 
-	var treeSize = int(math.Pow(2, float64(height)))
+	treeSize := int(math.Pow(2, float64(height)))
 
 	return &Subtree{
 		Nodes:    make([]SubtreeNode, 0, treeSize),
@@ -68,6 +72,7 @@ func NewTree(height int) (*Subtree, error) {
 	}, nil
 }
 
+// NewTreeByLeafCount creates a new Subtree with a height calculated from the maximum number of leaves.
 func NewTreeByLeafCount(maxNumberOfLeaves int) (*Subtree, error) {
 	if !IsPowerOfTwo(maxNumberOfLeaves) {
 		return nil, fmt.Errorf("numberOfLeaves must be a power of two")
@@ -78,16 +83,18 @@ func NewTreeByLeafCount(maxNumberOfLeaves int) (*Subtree, error) {
 	return NewTree(int(height))
 }
 
+// NewIncompleteTreeByLeafCount creates a new Subtree with a height calculated from the maximum number of leaves.
 func NewIncompleteTreeByLeafCount(maxNumberOfLeaves int) (*Subtree, error) {
 	height := math.Ceil(math.Log2(float64(maxNumberOfLeaves)))
 
 	return NewTree(int(height))
 }
 
+// NewSubtreeFromBytes creates a new Subtree from the provided byte slice.
 func NewSubtreeFromBytes(b []byte) (*Subtree, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Recovered in NewSubtreeFromBytes: %v\n", r)
+			log.Printf("Recovered in NewSubtreeFromBytes: %v\n", r)
 		}
 	}()
 
@@ -101,10 +108,11 @@ func NewSubtreeFromBytes(b []byte) (*Subtree, error) {
 	return subtree, nil
 }
 
+// NewSubtreeFromReader creates a new Subtree from the provided reader.
 func NewSubtreeFromReader(reader io.Reader) (*Subtree, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Printf("Recovered in NewSubtreeFromReader: %v\n", r)
+			log.Printf("Recovered in NewSubtreeFromReader: %v\n", r)
 		}
 	}()
 
@@ -117,6 +125,7 @@ func NewSubtreeFromReader(reader io.Reader) (*Subtree, error) {
 	return subtree, nil
 }
 
+// DeserializeNodesFromReader deserializes the nodes from the provided reader.
 func DeserializeNodesFromReader(reader io.Reader) (subtreeBytes []byte, err error) {
 	buf := bufio.NewReaderSize(reader, 1024*1024*16) // 16MB buffer
 
@@ -145,6 +154,7 @@ func DeserializeNodesFromReader(reader io.Reader) (subtreeBytes []byte, err erro
 	return subtreeBytes, nil
 }
 
+// Duplicate creates a deep copy of the Subtree.
 func (st *Subtree) Duplicate() *Subtree {
 	newSubtree := &Subtree{
 		Height:           st.Height,
@@ -183,6 +193,7 @@ func (st *Subtree) Length() int {
 	return length
 }
 
+// IsComplete checks if the subtree is complete, meaning it has the maximum number of nodes as defined by its height.
 func (st *Subtree) IsComplete() bool {
 	st.mu.RLock()
 	isComplete := len(st.Nodes) == cap(st.Nodes)
@@ -191,6 +202,7 @@ func (st *Subtree) IsComplete() bool {
 	return isComplete
 }
 
+// ReplaceRootNode replaces the root node of the subtree with the given node and returns the new root hash.
 func (st *Subtree) ReplaceRootNode(node *chainhash.Hash, fee uint64, sizeInBytes uint64) *chainhash.Hash {
 	if len(st.Nodes) < 1 {
 		st.Nodes = append(st.Nodes, SubtreeNode{
@@ -212,6 +224,7 @@ func (st *Subtree) ReplaceRootNode(node *chainhash.Hash, fee uint64, sizeInBytes
 	return st.RootHash()
 }
 
+// AddSubtreeNode adds a SubtreeNode to the subtree.
 func (st *Subtree) AddSubtreeNode(node SubtreeNode) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -246,6 +259,7 @@ func (st *Subtree) AddSubtreeNode(node SubtreeNode) error {
 	return nil
 }
 
+// AddCoinbaseNode adds a coinbase node to the subtree.
 func (st *Subtree) AddCoinbaseNode() error {
 	if len(st.Nodes) != 0 {
 		return fmt.Errorf("subtree should be empty before adding a coinbase node")
@@ -263,6 +277,7 @@ func (st *Subtree) AddCoinbaseNode() error {
 	return nil
 }
 
+// AddConflictingNode adds a conflicting node to the subtree.
 func (st *Subtree) AddConflictingNode(newConflictingNode chainhash.Hash) error {
 	if st.ConflictingNodes == nil {
 		st.ConflictingNodes = make([]chainhash.Hash, 0, 1)
@@ -295,7 +310,7 @@ func (st *Subtree) AddConflictingNode(newConflictingNode chainhash.Hash) error {
 }
 
 // AddNode adds a node to the subtree
-// NOTE: this function is not concurrency safe, so it should be called from a single goroutine
+// WARNING: this function is not concurrency safe, so it should be called from a single goroutine
 //
 // Parameters:
 //   - node: the transaction id of the node to add
@@ -363,6 +378,7 @@ func (st *Subtree) RemoveNodeAtIndex(index int) error {
 	return nil
 }
 
+// RootHash calculates and returns the root hash of the subtree.
 func (st *Subtree) RootHash() *chainhash.Hash {
 	if st == nil {
 		return nil
@@ -387,6 +403,7 @@ func (st *Subtree) RootHash() *chainhash.Hash {
 	return st.rootHash
 }
 
+// RootHashWithReplaceRootNode replaces the root node of the subtree with the given node and returns the new root hash.
 func (st *Subtree) RootHashWithReplaceRootNode(node *chainhash.Hash, fee uint64, sizeInBytes uint64) (*chainhash.Hash, error) {
 	if st == nil {
 		return nil, fmt.Errorf("subtree is nil")
@@ -407,6 +424,7 @@ func (st *Subtree) RootHashWithReplaceRootNode(node *chainhash.Hash, fee uint64,
 	return &rootHash, nil
 }
 
+// GetMap returns a TxMap representation of the subtree, mapping transaction hashes to their indices.
 func (st *Subtree) GetMap() (TxMap, error) {
 	lengthUint32, err := safe.IntToUint32(len(st.Nodes))
 	if err != nil {
@@ -421,6 +439,7 @@ func (st *Subtree) GetMap() (TxMap, error) {
 	return m, nil
 }
 
+// NodeIndex returns the index of the node with the given hash in the subtree.
 func (st *Subtree) NodeIndex(hash chainhash.Hash) int {
 	if st.nodeIndex == nil {
 		// create the node index map
@@ -442,10 +461,12 @@ func (st *Subtree) NodeIndex(hash chainhash.Hash) int {
 	return -1
 }
 
+// HasNode checks if the subtree contains a node with the given hash.
 func (st *Subtree) HasNode(hash chainhash.Hash) bool {
 	return st.NodeIndex(hash) != -1
 }
 
+// GetNode returns the SubtreeNode with the given hash, or an error if it does not exist.
 func (st *Subtree) GetNode(hash chainhash.Hash) (*SubtreeNode, error) {
 	nodeIndex := st.NodeIndex(hash)
 	if nodeIndex != -1 {
@@ -455,6 +476,7 @@ func (st *Subtree) GetNode(hash chainhash.Hash) (*SubtreeNode, error) {
 	return nil, fmt.Errorf("node not found")
 }
 
+// Difference returns the nodes in the subtree that are not present in the given TxMap.
 func (st *Subtree) Difference(ids TxMap) ([]SubtreeNode, error) {
 	// return all the ids that are in st.Nodes, but not in ids
 	diff := make([]SubtreeNode, 0, 1_000)
@@ -517,6 +539,7 @@ func (st *Subtree) GetMerkleProof(index int) ([]*chainhash.Hash, error) {
 	return nodes, nil
 }
 
+// Serialize serializes the subtree into a byte slice.
 func (st *Subtree) Serialize() ([]byte, error) {
 	bufBytes := make([]byte, 0, 32+8+8+8+(len(st.Nodes)*32)+8+(len(st.ConflictingNodes)*32))
 	buf := bytes.NewBuffer(bufBytes)
@@ -610,6 +633,7 @@ func (st *Subtree) SerializeNodes() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Deserialize deserializes the subtree from the provided byte slice.
 func (st *Subtree) Deserialize(b []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -622,6 +646,7 @@ func (st *Subtree) Deserialize(b []byte) (err error) {
 	return st.DeserializeFromReader(buf)
 }
 
+// DeserializeFromReader deserializes the subtree from the provided reader.
 func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -670,6 +695,7 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 	return nil
 }
 
+// deserializeNodes deserializes the nodes from the provided buffered reader.
 func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 	bytes8 := make([]byte, 8)
 
@@ -704,6 +730,7 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 	return nil
 }
 
+// deserializeConflictingNodes deserializes the conflicting nodes from the provided buffered reader.
 func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 	bytes8 := make([]byte, 8)
 
@@ -720,13 +747,14 @@ func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 
 	for i := uint64(0); i < numConflictingLeaves; i++ {
 		if n, err := buf.Read(st.ConflictingNodes[i][:]); err != nil || n != 32 {
-			return fmt.Errorf("unable to read conflicting node %d: %s", i, err)
+			return fmt.Errorf("unable to read conflicting node %d: %w", i, err)
 		}
 	}
 
 	return nil
 }
 
+// ReadBytes reads bytes from the buffered reader into the provided byte slice.
 func ReadBytes(buf *bufio.Reader, p []byte) (n int, err error) {
 	minRead := len(p)
 	for n < minRead && err == nil {
@@ -743,6 +771,7 @@ func ReadBytes(buf *bufio.Reader, p []byte) (n int, err error) {
 	return
 }
 
+// DeserializeSubtreeConflictingFromReader deserializes the conflicting nodes from the provided reader.
 func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes []chainhash.Hash, err error) {
 	defer func() {
 		if r := recover(); r != nil {

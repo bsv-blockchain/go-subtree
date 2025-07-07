@@ -12,11 +12,13 @@ import (
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
 )
 
+// Inpoint represents an input point in a transaction, consisting of a parent transaction hash and an index.
 type Inpoint struct {
 	Hash  chainhash.Hash
 	Index uint32
 }
 
+// TxInpoints represents a collection of transaction inpoints, which are the parent transaction hashes and their corresponding indexes.
 type TxInpoints struct {
 	ParentTxHashes []chainhash.Hash
 	Idxs           [][]uint32
@@ -25,13 +27,15 @@ type TxInpoints struct {
 	nrInpoints int
 }
 
+// NewTxInpoints creates a new TxInpoints object with initialized slices for parent transaction hashes and indexes.
 func NewTxInpoints() TxInpoints {
 	return TxInpoints{
-		ParentTxHashes: make([]chainhash.Hash, 0, 8), // initial capacity of 8, can grow as needed
-		Idxs:           make([][]uint32, 0, 16),      // initial capacity of 16, can grow as needed
+		ParentTxHashes: make([]chainhash.Hash, 0, 8), // initial capacity of 8 can grow as needed
+		Idxs:           make([][]uint32, 0, 16),      // the initial capacity of 16 can grow as needed
 	}
 }
 
+// NewTxInpointsFromTx creates a new TxInpoints object from a given transaction.
 func NewTxInpointsFromTx(tx *bt.Tx) (TxInpoints, error) {
 	p := NewTxInpoints()
 	p.addTx(tx)
@@ -39,6 +43,7 @@ func NewTxInpointsFromTx(tx *bt.Tx) (TxInpoints, error) {
 	return p, nil
 }
 
+// NewTxInpointsFromInputs creates a new TxInpoints object from a slice of transaction inputs.
 func NewTxInpointsFromInputs(inputs []*bt.Input) (TxInpoints, error) {
 	p := TxInpoints{}
 
@@ -50,6 +55,7 @@ func NewTxInpointsFromInputs(inputs []*bt.Input) (TxInpoints, error) {
 	return p, nil
 }
 
+// NewTxInpointsFromBytes creates a new TxInpoints object from a byte slice.
 func NewTxInpointsFromBytes(data []byte) (TxInpoints, error) {
 	p := TxInpoints{}
 
@@ -60,6 +66,7 @@ func NewTxInpointsFromBytes(data []byte) (TxInpoints, error) {
 	return p, nil
 }
 
+// NewTxInpointsFromReader creates a new TxInpoints object from an io.Reader.
 func NewTxInpointsFromReader(buf io.Reader) (TxInpoints, error) {
 	p := TxInpoints{}
 
@@ -70,25 +77,9 @@ func NewTxInpointsFromReader(buf io.Reader) (TxInpoints, error) {
 	return p, nil
 }
 
+// String returns a string representation of the TxInpoints object.
 func (p *TxInpoints) String() string {
 	return fmt.Sprintf("TxInpoints{ParentTxHashes: %v, Idxs: %v}", p.ParentTxHashes, p.Idxs)
-}
-
-func (p *TxInpoints) addTx(tx *bt.Tx) {
-	// Do not error out for transactions without inputs, seeded Teranodes will have txs without inputs
-	for _, input := range tx.Inputs {
-		hash := *input.PreviousTxIDChainHash()
-
-		index := slices.Index(p.ParentTxHashes, hash)
-		if index != -1 {
-			p.Idxs[index] = append(p.Idxs[index], input.PreviousTxOutIndex)
-		} else {
-			p.ParentTxHashes = append(p.ParentTxHashes, hash)
-			p.Idxs = append(p.Idxs, []uint32{input.PreviousTxOutIndex})
-		}
-
-		p.nrInpoints++
-	}
 }
 
 // GetParentTxHashes returns the unique parent tx hashes
@@ -96,6 +87,7 @@ func (p *TxInpoints) GetParentTxHashes() []chainhash.Hash {
 	return p.ParentTxHashes
 }
 
+// GetParentTxHashAtIndex returns the parent transaction hash at the specified index.
 func (p *TxInpoints) GetParentTxHashAtIndex(index int) (chainhash.Hash, error) {
 	if index >= len(p.ParentTxHashes) {
 		return chainhash.Hash{}, fmt.Errorf("index out of range")
@@ -120,6 +112,7 @@ func (p *TxInpoints) GetTxInpoints() []Inpoint {
 	return inpoints
 }
 
+// GetParentVoutsAtIndex returns the parent transaction output indexes at the specified index.
 func (p *TxInpoints) GetParentVoutsAtIndex(index int) ([]uint32, error) {
 	if index >= len(p.ParentTxHashes) {
 		return nil, fmt.Errorf("index out of range")
@@ -128,6 +121,7 @@ func (p *TxInpoints) GetParentVoutsAtIndex(index int) ([]uint32, error) {
 	return p.Idxs[index], nil
 }
 
+// Serialize serializes the TxInpoints object into a byte slice.
 func (p *TxInpoints) Serialize() ([]byte, error) {
 	if len(p.ParentTxHashes) != len(p.Idxs) {
 		return nil, fmt.Errorf("parent tx hashes and indexes length mismatch")
@@ -144,13 +138,13 @@ func (p *TxInpoints) Serialize() ([]byte, error) {
 	binary.LittleEndian.PutUint32(bytesUint32[:], len32(p.ParentTxHashes))
 
 	if _, err = buf.Write(bytesUint32[:]); err != nil {
-		return nil, fmt.Errorf("unable to write number of parent inpoints: %s", err)
+		return nil, fmt.Errorf("unable to write number of parent inpoints: %w", err)
 	}
 
 	// write the parent tx hashes
 	for _, hash := range p.ParentTxHashes {
 		if _, err = buf.Write(hash[:]); err != nil {
-			return nil, fmt.Errorf("unable to write parent tx hash: %s", err)
+			return nil, fmt.Errorf("unable to write parent tx hash: %w", err)
 		}
 	}
 
@@ -159,14 +153,14 @@ func (p *TxInpoints) Serialize() ([]byte, error) {
 		binary.LittleEndian.PutUint32(bytesUint32[:], len32(indexes))
 
 		if _, err = buf.Write(bytesUint32[:]); err != nil {
-			return nil, fmt.Errorf("unable to write number of parent indexes: %s", err)
+			return nil, fmt.Errorf("unable to write number of parent indexes: %w", err)
 		}
 
 		for _, idx := range indexes {
 			binary.LittleEndian.PutUint32(bytesUint32[:], idx)
 
 			if _, err = buf.Write(bytesUint32[:]); err != nil {
-				return nil, fmt.Errorf("unable to write parent index: %s", err)
+				return nil, fmt.Errorf("unable to write parent index: %w", err)
 			}
 		}
 	}
@@ -174,12 +168,31 @@ func (p *TxInpoints) Serialize() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// addTx adds a transaction to the TxInpoints object, extracting its inputs and updating the parent transaction hashes and indexes.
+func (p *TxInpoints) addTx(tx *bt.Tx) {
+	// Do not error out for transactions without inputs, seeded Teranodes will have txs without inputs
+	for _, input := range tx.Inputs {
+		hash := *input.PreviousTxIDChainHash()
+
+		index := slices.Index(p.ParentTxHashes, hash)
+		if index != -1 {
+			p.Idxs[index] = append(p.Idxs[index], input.PreviousTxOutIndex)
+		} else {
+			p.ParentTxHashes = append(p.ParentTxHashes, hash)
+			p.Idxs = append(p.Idxs, []uint32{input.PreviousTxOutIndex})
+		}
+
+		p.nrInpoints++
+	}
+}
+
+// deserializeFromReader reads the TxInpoints data from the provided reader and populates the TxInpoints object.
 func (p *TxInpoints) deserializeFromReader(buf io.Reader) error {
 	// read the number of parent inpoints
 	var bytesUint32 [4]byte
 
 	if _, err := io.ReadFull(buf, bytesUint32[:]); err != nil {
-		return fmt.Errorf("unable to read number of parent inpoints: %s", err)
+		return fmt.Errorf("unable to read number of parent inpoints: %w", err)
 	}
 
 	totalInpointsLen := binary.LittleEndian.Uint32(bytesUint32[:])
@@ -197,14 +210,14 @@ func (p *TxInpoints) deserializeFromReader(buf io.Reader) error {
 	// read the parent tx hash
 	for i := uint32(0); i < totalInpointsLen; i++ {
 		if _, err := io.ReadFull(buf, p.ParentTxHashes[i][:]); err != nil {
-			return fmt.Errorf("unable to read parent tx hash: %s", err)
+			return fmt.Errorf("unable to read parent tx hash: %w", err)
 		}
 	}
 
 	// read the number of parent indexes
 	for i := uint32(0); i < totalInpointsLen; i++ {
 		if _, err := io.ReadFull(buf, bytesUint32[:]); err != nil {
-			return fmt.Errorf("unable to read number of parent indexes: %s", err)
+			return fmt.Errorf("unable to read number of parent indexes: %w", err)
 		}
 
 		parentIndexesLen := binary.LittleEndian.Uint32(bytesUint32[:])
@@ -214,7 +227,7 @@ func (p *TxInpoints) deserializeFromReader(buf io.Reader) error {
 
 		for j := uint32(0); j < parentIndexesLen; j++ {
 			if _, err := io.ReadFull(buf, bytesUint32[:]); err != nil {
-				return fmt.Errorf("unable to read parent index: %s", err)
+				return fmt.Errorf("unable to read parent index: %w", err)
 			}
 
 			p.Idxs[i][j] = binary.LittleEndian.Uint32(bytesUint32[:])

@@ -2,6 +2,7 @@ package subtree
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
 )
 
+// SubtreeData represents the data associated with a subtree.
 type SubtreeData struct {
 	Subtree *Subtree
 	Txs     []*bt.Tx
@@ -24,32 +26,36 @@ func NewSubtreeData(subtree *Subtree) *SubtreeData {
 	}
 }
 
+// NewSubtreeDataFromBytes creates a new SubtreeData object from the provided byte slice.
 func NewSubtreeDataFromBytes(subtree *Subtree, dataBytes []byte) (*SubtreeData, error) {
 	s := &SubtreeData{
 		Subtree: subtree,
 	}
 	if err := s.serializeFromReader(bytes.NewReader(dataBytes)); err != nil {
-		return nil, fmt.Errorf("unable to create subtree data from bytes: %s", err)
+		return nil, fmt.Errorf("unable to create subtree data from bytes: %w", err)
 	}
 
 	return s, nil
 }
 
+// NewSubtreeDataFromReader creates a new SubtreeData object from the provided reader.
 func NewSubtreeDataFromReader(subtree *Subtree, dataReader io.Reader) (*SubtreeData, error) {
 	s := &SubtreeData{
 		Subtree: subtree,
 	}
 	if err := s.serializeFromReader(dataReader); err != nil {
-		return nil, fmt.Errorf("unable to create subtree data from reader: %s", err)
+		return nil, fmt.Errorf("unable to create subtree data from reader: %w", err)
 	}
 
 	return s, nil
 }
 
+// RootHash returns the root hash of the subtree.
 func (s *SubtreeData) RootHash() *chainhash.Hash {
 	return s.Subtree.RootHash()
 }
 
+// AddTx adds a transaction to the subtree data at the specified index.
 func (s *SubtreeData) AddTx(tx *bt.Tx, index int) error {
 	if index == 0 && tx.IsCoinbase() && s.Subtree.Nodes[index].Hash.Equal(CoinbasePlaceholderHashValue) {
 		// we got the coinbase tx as the first tx, we need to add it as the first tx and stop further processing
@@ -64,57 +70,6 @@ func (s *SubtreeData) AddTx(tx *bt.Tx, index int) error {
 	}
 
 	s.Txs[index] = tx
-
-	return nil
-}
-
-func (s *SubtreeData) serializeFromReader(buf io.Reader) error {
-	var (
-		err     error
-		txIndex int
-	)
-
-	if s.Subtree == nil || len(s.Subtree.Nodes) == 0 {
-		return fmt.Errorf("subtree nodes slice is empty")
-	}
-
-	if s.Subtree.Nodes[0].Hash.Equal(CoinbasePlaceholderHashValue) {
-		txIndex = 1
-	}
-
-	// initialize the txs array
-	s.Txs = make([]*bt.Tx, s.Subtree.Length())
-
-	for {
-		tx := &bt.Tx{}
-
-		_, err = tx.ReadFrom(buf)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-
-			return fmt.Errorf("error reading transaction: %s", err)
-		}
-
-		if txIndex == 1 && tx.IsCoinbase() {
-			// we got the coinbase tx as the first tx, we need to add it as the first tx and continue
-			s.Txs[0] = tx
-
-			continue
-		}
-
-		if txIndex >= len(s.Subtree.Nodes) {
-			return fmt.Errorf("transaction index out of bounds")
-		}
-
-		if !s.Subtree.Nodes[txIndex].Hash.Equal(*tx.TxIDChainHash()) {
-			return fmt.Errorf("transaction hash does not match subtree node hash")
-		}
-
-		s.Txs[txIndex] = tx
-		txIndex++
-	}
 
 	return nil
 }
@@ -149,9 +104,61 @@ func (s *SubtreeData) Serialize() ([]byte, error) {
 
 		_, err = buf.Write(b)
 		if err != nil {
-			return nil, fmt.Errorf("error writing tx data: %s", err)
+			return nil, fmt.Errorf("error writing tx data: %w", err)
 		}
 	}
 
 	return buf.Bytes(), nil
+}
+
+// serializeFromReader reads transactions from the provided reader and populates the Txs field.
+func (s *SubtreeData) serializeFromReader(buf io.Reader) error {
+	var (
+		err     error
+		txIndex int
+	)
+
+	if s.Subtree == nil || len(s.Subtree.Nodes) == 0 {
+		return fmt.Errorf("subtree nodes slice is empty")
+	}
+
+	if s.Subtree.Nodes[0].Hash.Equal(CoinbasePlaceholderHashValue) {
+		txIndex = 1
+	}
+
+	// initialize the txs array
+	s.Txs = make([]*bt.Tx, s.Subtree.Length())
+
+	for {
+		tx := &bt.Tx{}
+
+		_, err = tx.ReadFrom(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+
+			return fmt.Errorf("error reading transaction: %w", err)
+		}
+
+		if txIndex == 1 && tx.IsCoinbase() {
+			// we got the coinbase tx as the first tx, we need to add it as the first tx and continue
+			s.Txs[0] = tx
+
+			continue
+		}
+
+		if txIndex >= len(s.Subtree.Nodes) {
+			return fmt.Errorf("transaction index out of bounds")
+		}
+
+		if !s.Subtree.Nodes[txIndex].Hash.Equal(*tx.TxIDChainHash()) {
+			return fmt.Errorf("transaction hash does not match subtree node hash")
+		}
+
+		s.Txs[txIndex] = tx
+		txIndex++
+	}
+
+	return nil
 }

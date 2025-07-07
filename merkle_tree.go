@@ -9,6 +9,7 @@ import (
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
 )
 
+// GetMerkleProofForCoinbase returns a merkle proof for the coinbase transaction
 func GetMerkleProofForCoinbase(subtrees []*Subtree) ([]*chainhash.Hash, error) {
 	if len(subtrees) == 0 {
 		return nil, fmt.Errorf("no subtrees available")
@@ -16,7 +17,7 @@ func GetMerkleProofForCoinbase(subtrees []*Subtree) ([]*chainhash.Hash, error) {
 
 	merkleProof, err := subtrees[0].GetMerkleProof(0)
 	if err != nil {
-		return nil, fmt.Errorf("failed creating merkle proof for subtree: %s", err)
+		return nil, fmt.Errorf("failed creating merkle proof for subtree: %w", err)
 	}
 
 	// Create a new tree with the subtreeHashes of the subtrees
@@ -34,12 +35,13 @@ func GetMerkleProofForCoinbase(subtrees []*Subtree) ([]*chainhash.Hash, error) {
 
 	topMerkleProof, err := topTree.GetMerkleProof(0)
 	if err != nil {
-		return nil, fmt.Errorf("failed creating merkle proofs for top tree: %s", err)
+		return nil, fmt.Errorf("failed creating merkle proofs for top tree: %w", err)
 	}
 
 	return append(merkleProof, topMerkleProof...), nil
 }
 
+// BuildMerkleTreeStoreFromBytes builds a merkle tree from the given nodes.
 func BuildMerkleTreeStoreFromBytes(nodes []SubtreeNode) (*[]chainhash.Hash, error) {
 	if len(nodes) == 0 {
 		return &[]chainhash.Hash{}, nil
@@ -91,6 +93,7 @@ func BuildMerkleTreeStoreFromBytes(nodes []SubtreeNode) (*[]chainhash.Hash, erro
 	return &merkles, nil
 }
 
+// calcMerkles calculates the merkle hashes for the given nodes in the range
 func calcMerkles(nodes []SubtreeNode, merkleFrom, merkleTo, nextPoT, length int, merkles []chainhash.Hash) {
 	var offset int
 
@@ -122,6 +125,7 @@ func calcMerkles(nodes []SubtreeNode, merkleFrom, merkleTo, nextPoT, length int,
 	}
 }
 
+// calcMerkle calculates the parent node hash from the left and right child nodes
 func calcMerkle(currentMerkle chainhash.Hash, currentMerkle1 chainhash.Hash) [32]byte {
 	switch {
 	// When there is no left child node, the parent is nil ("") too.
