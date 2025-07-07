@@ -32,6 +32,7 @@ func generateCoinbasePlaceholderTx() *bt.Tx {
 	tx := bt.NewTx()
 	tx.Version = 0xFFFFFFFF
 	tx.LockTime = 0xFFFFFFFF
+
 	return tx
 }
 
@@ -40,5 +41,6 @@ func IsCoinbasePlaceHolderTx(tx *bt.Tx) bool {
 	coinbasePlaceholderTx := generateCoinbasePlaceholderTx()
 
 	coinbasePlaceholderTxHash := coinbasePlaceholderTx.TxIDChainHash()
+
 	return tx.TxIDChainHash().IsEqual(coinbasePlaceholderTxHash)
 }

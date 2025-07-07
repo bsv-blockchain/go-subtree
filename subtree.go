@@ -29,10 +29,12 @@ type Subtree struct {
 	ConflictingNodes []chainhash.Hash // conflicting nodes need to be checked when doing block assembly
 
 	// temporary (calculated) variables
-	rootHash     *chainhash.Hash
-	treeSize     int
-	feeBytes     []byte
-	feeHashBytes []byte
+	rootHash *chainhash.Hash
+	treeSize int
+
+	//feeBytes []byte // unused, but kept for reference
+
+	//feeHashBytes []byte // unused, but kept for reference
 
 	mu        sync.RWMutex           // protects Nodes slice
 	nodeIndex map[chainhash.Hash]int // maps txid to index in Nodes slice
@@ -48,7 +50,7 @@ type TxMap interface {
 
 // NewTree creates a new Subtree with a fixed height
 //
-// height is the number if levels in a merkle tree of the subtree
+//	is the number if levels in a merkle tree of the subtree
 func NewTree(height int) (*Subtree, error) {
 	if height < 0 {
 		return nil, fmt.Errorf("height must be at least 0")
@@ -129,7 +131,7 @@ func DeserializeNodesFromReader(reader io.Reader) (subtreeBytes []byte, err erro
 	}
 
 	numLeaves := binary.LittleEndian.Uint64(byteBuffer[chainhash.HashSize+16 : chainhash.HashSize+24])
-	subtreeBytes = make([]byte, chainhash.HashSize*int(numLeaves))
+	subtreeBytes = make([]byte, chainhash.HashSize*int(numLeaves)) //nolint:gosec // G115: integer overflow conversion
 
 	byteBuffer = byteBuffer[8:] // reduce read byteBuffer size by 8
 	for i := uint64(0); i < numLeaves; i++ {
@@ -413,7 +415,7 @@ func (st *Subtree) GetMap() (TxMap, error) {
 
 	m := txmap.NewSwissMapUint64(lengthUint32)
 	for idx, node := range st.Nodes {
-		_ = m.Put(node.Hash, uint64(idx))
+		_ = m.Put(node.Hash, uint64(idx)) //nolint:gosec // G115: integer overflow conversion int -> uint32
 	}
 
 	return m, nil
@@ -679,7 +681,7 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 
 	numLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	st.treeSize = int(numLeaves)
+	st.treeSize = int(numLeaves) //nolint:gosec // G115: integer overflow conversion int -> uint32
 	// the height of a subtree is always a power of two
 	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
 
@@ -705,7 +707,7 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 	bytes8 := make([]byte, 8)
 
-	// read number of conflicting nodes
+	// read the number of conflicting nodes
 	if n, err := buf.Read(bytes8); err != nil || n != 8 {
 		// if _, err = io.ReadFull(buf, bytes8); err != nil {
 		return fmt.Errorf("unable to read number of conflicting nodes: %w", err)
@@ -771,7 +773,7 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 
 	_, _ = buf.Discard(48 * numLeavesInt)
 
-	// read number of conflicting nodes
+	// read the number of conflicting nodes
 	if _, err = io.ReadFull(buf, bytes8); err != nil {
 		return nil, fmt.Errorf("unable to read number of conflicting nodes: %w", err)
 	}

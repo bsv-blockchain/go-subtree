@@ -41,7 +41,7 @@ func BenchmarkSubtree_Serialize(b *testing.B) {
 		// int to bytes
 		var bb [32]byte
 
-		binary.LittleEndian.PutUint32(bb[:], uint32(i))
+		binary.LittleEndian.PutUint32(bb[:], uint32(i)) //nolint:gosec // G115: integer overflow conversion int -> uint32
 		_ = st.AddNode(*(*chainhash.Hash)(&bb), 111, 234)
 	}
 
@@ -60,7 +60,7 @@ func BenchmarkSubtree_SerializeNodes(b *testing.B) {
 		// int to bytes
 		var bb [32]byte
 
-		binary.LittleEndian.PutUint32(bb[:], uint32(i))
+		binary.LittleEndian.PutUint32(bb[:], uint32(i)) //nolint:gosec // G115: integer overflow conversion int -> uint32
 		_ = st.AddNode(*(*chainhash.Hash)(&bb), 111, 234)
 	}
 

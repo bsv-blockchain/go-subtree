@@ -75,6 +75,7 @@ func BuildMerkleTreeStoreFromBytes(nodes []SubtreeNode) (*[]chainhash.Hash, erro
 
 				go func(i int) {
 					defer wg.Done()
+
 					calcMerkles(nodes, i, Min(i+routineSplitSize, merkleTo), nextPoT, length, merkles)
 				}(i)
 			}

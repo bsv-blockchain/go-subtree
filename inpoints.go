@@ -76,7 +76,6 @@ func (p *TxInpoints) String() string {
 
 func (p *TxInpoints) addTx(tx *bt.Tx) {
 	// Do not error out for transactions without inputs, seeded Teranodes will have txs without inputs
-
 	for _, input := range tx.Inputs {
 		hash := *input.PreviousTxIDChainHash()
 
