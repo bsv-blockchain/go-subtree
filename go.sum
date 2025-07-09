@@ -1,5 +1,5 @@
-github.com/bsv-blockchain/go-bt/v2 v2.4.2 h1:ylVJhhWc40tNDO4+6smoA+TZKdElD/eD8Bu/A3/ZoSc=
-github.com/bsv-blockchain/go-bt/v2 v2.4.2/go.mod h1:VKgjtP0Ot2wNzNef42vGVjmamCpolVN1aH+XepLnJ8w=
+github.com/bsv-blockchain/go-bt/v2 v2.4.3 h1:oc++fB7F8vTVRgtn82ir/+R2ZbBhfV9l2xGapNHSEto=
+github.com/bsv-blockchain/go-bt/v2 v2.4.3/go.mod h1:VKgjtP0Ot2wNzNef42vGVjmamCpolVN1aH+XepLnJ8w=
 github.com/bsv-blockchain/go-safe-conversion v1.0.3 h1:sn6G6OQe1LBRJ1vUZFhxVuF60ZygNcxK+9cOpFEVmfY=
 github.com/bsv-blockchain/go-safe-conversion v1.0.3/go.mod h1:q2+SQIAONrc2T7Ip1W9OsEzKXLoWeI06vuVm0Q85Bss=
 github.com/bsv-blockchain/go-sdk v1.2.4 h1:Vl+u/PoBl3+wtQF7CoRTLhBCqIs+MqHgB/xj76+rKHI=
