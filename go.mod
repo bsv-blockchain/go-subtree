@@ -3,7 +3,7 @@ module github.com/bsv-blockchain/go-subtree
 go 1.24.3
 
 require (
-	github.com/bsv-blockchain/go-bt/v2 v2.4.3
+	github.com/bsv-blockchain/go-bt/v2 v2.4.4
 	github.com/bsv-blockchain/go-safe-conversion v1.0.3
 	github.com/bsv-blockchain/go-tx-map v1.0.5
 	github.com/stretchr/testify v1.10.0
