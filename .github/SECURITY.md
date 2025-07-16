@@ -45,7 +45,7 @@ All official security responses are signed with it.
 We regularly scan for known vulnerabilities using:
 
 * [`govulncheck`](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck): Checks Go code and dependencies for known vulnerabilities using the Go vulnerability database.
-* [`ask nancy`](https://github.com/sonatype-nexus-community/nancy): As part of our CI (see `run-tests.yml`), we run [nancy](https://github.com/sonatype-nexus-community/nancy) to check Go dependencies for vulnerabilities against the OSS Index. This helps us catch issues in third-party packages early.
+* [`ask nancy`](https://github.com/sonatype-nexus-community/nancy): As part of our CI (see `fortress.yml`), we run [nancy](https://github.com/sonatype-nexus-community/nancy) to check Go dependencies for vulnerabilities against the OSS Index. This helps us catch issues in third-party packages early.
 
 Want to run these yourself?
 
@@ -68,7 +68,7 @@ We follow the [OpenSSF](https://openssf.org) best practices to ensure this repos
 
 To proactively protect this repository, we use several automated GitHub workflows:
 
-- **[CodeQL Analysis](./workflows/codeql-analysis.yml)**: Scans the codebase for security vulnerabilities and coding errors using GitHub's CodeQL engine on every push and pull request to the `master` branch.
+- **[CodeQL Analysis](workflows/codeql-analysis.yml)**: Scans the codebase for security vulnerabilities and coding errors using GitHub's CodeQL engine on every push and pull request to the `master` branch.
 - **[OpenSSF Scorecard](./workflows/scorecard.yml)**: Periodically evaluates the repository against OpenSSF Scorecard checks, providing insights and recommendations for improving supply chain security and best practices.
 
 These workflows help us identify, remediate, and prevent security issues as early as possible in the development lifecycle. For more details, see the workflow files in the [`.github/workflows/`](https://github.com/bsv-blockchain/go-subtree/tree/master/.github/workflows) directory.
