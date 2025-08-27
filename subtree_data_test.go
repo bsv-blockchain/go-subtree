@@ -192,6 +192,33 @@ func TestSerialize(t *testing.T) {
 		assert.Contains(t, err.Error(), "subtree length does not match tx data length")
 		assert.Nil(t, serializedData)
 	})
+
+	t.Run("serialize non-extended", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+
+		subtreeData := NewSubtreeData(subtree)
+
+		tx2NonExtended, err := bt.NewTxFromBytes(tx2.Bytes())
+		require.NoError(t, err)
+
+		_ = subtreeData.AddTx(tx1, 0)
+		_ = subtreeData.AddTx(tx2NonExtended, 1)
+
+		// Second transaction is missing, so serialization should fail
+		serializedDataBytes, err := subtreeData.Serialize()
+		require.NoError(t, err)
+
+		subtreeData2, err := NewSubtreeDataFromBytes(subtree, serializedDataBytes)
+		require.NoError(t, err)
+		require.NotNil(t, subtreeData2)
+
+		assert.True(t, subtreeData2.Txs[0].IsExtended())
+		assert.False(t, subtreeData2.Txs[1].IsExtended())
+	})
 }
 
 func TestNewSubtreeDataFromBytes(t *testing.T) {

@@ -100,7 +100,7 @@ func (s *SubtreeData) Serialize() ([]byte, error) {
 	buf := bytes.NewBuffer(bufBytes)
 
 	for i := txStartIndex; i < subtreeLen; i++ {
-		b := s.Txs[i].ExtendedBytes()
+		b := s.Txs[i].SerializeBytes()
 
 		_, err = buf.Write(b)
 		if err != nil {
