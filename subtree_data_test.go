@@ -314,6 +314,75 @@ func TestNewSubtreeDataFromReader(t *testing.T) {
 	})
 }
 
+func TestDataRootHash(t *testing.T) {
+	t.Run("get root hash from data", func(t *testing.T) {
+		_, subtreeData := setupData(t)
+
+		// Get the root hash
+		rootHash := subtreeData.RootHash()
+		require.NotNil(t, rootHash)
+
+		// Verify it matches the subtree's root hash
+		expectedRootHash := subtreeData.Subtree.RootHash()
+		assert.Equal(t, expectedRootHash, rootHash)
+	})
+}
+
+func TestSerializeFromReaderErrors(t *testing.T) {
+	t.Run("nil subtree", func(t *testing.T) {
+		data := &Data{
+			Subtree: nil,
+			Txs:     make([]*bt.Tx, 0),
+		}
+
+		// Should fail with nil subtree
+		err := data.serializeFromReader(bytes.NewReader([]byte{}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "subtree nodes slice is empty")
+	})
+
+	t.Run("empty subtree nodes", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		data := &Data{
+			Subtree: subtree,
+			Txs:     make([]*bt.Tx, 0),
+		}
+
+		// Should fail with empty nodes
+		err = data.serializeFromReader(bytes.NewReader([]byte{}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "subtree nodes slice is empty")
+	})
+
+	t.Run("tx index out of bounds", func(t *testing.T) {
+		tx1 := tx.Clone()
+		tx1.Version = 1
+
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+
+		data := &Data{
+			Subtree: subtree,
+			Txs:     make([]*bt.Tx, 1),
+		}
+
+		// Create multiple transactions to cause index out of bounds
+		var txBytes []byte
+		for i := 0; i < 10; i++ {
+			txClone := tx.Clone()
+			txClone.Version = uint32(i + 1) //nolint:gosec // G115: Safe conversion, i is limited to 10
+			txBytes = append(txBytes, txClone.Bytes()...)
+		}
+
+		err = data.serializeFromReader(bytes.NewReader(txBytes))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "transaction index out of bounds")
+	})
+}
+
 // Mock reader for testing
 type mockReader struct {
 	err error
