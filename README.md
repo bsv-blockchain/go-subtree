@@ -108,7 +108,7 @@ go install github.com/mrz1836/mage-x/cmd/magex@latest
 - **Benchmarks** – Check the latest numbers in the [benchmark results](#benchmark-results)
 - **Test Suite** – Review both the [unit tests](subtree_test.go) and [fuzz tests](subtree_fuzz_test.go) (powered by [`testify`](https://github.com/stretchr/testify))
 
-> **Good to know:** `go-subtree` ships with *zero* runtime dependencies.  
+> **Good to know:** `go-subtree` ships with *zero* runtime dependencies.
 > The only external package we use is `testify`—and that's strictly for tests.
 
 <br/>
