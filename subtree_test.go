@@ -2,6 +2,7 @@ package subtree
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"testing"
 
@@ -941,6 +942,81 @@ func TestAddNode(t *testing.T) {
 		index, exists := st.nodeIndex[*hash]
 		require.True(t, exists)
 		require.Equal(t, 0, index)
+	})
+}
+
+func TestNewSubtreeFromBytesErrors(t *testing.T) {
+	t.Run("invalid bytes", func(t *testing.T) {
+		invalidBytes := []byte{0x01, 0x02, 0x03}
+		_, err := NewSubtreeFromBytes(invalidBytes)
+		require.Error(t, err)
+	})
+}
+
+func TestNewSubtreeFromReaderErrors(t *testing.T) {
+	t.Run("invalid reader", func(t *testing.T) {
+		invalidBytes := []byte{0x01, 0x02, 0x03}
+		_, err := NewSubtreeFromReader(bytes.NewReader(invalidBytes))
+		require.Error(t, err)
+	})
+}
+
+func TestDeserializeFromReaderErrors(t *testing.T) {
+	t.Run("corrupted root hash", func(t *testing.T) {
+		st := &Subtree{}
+		// Only 10 bytes instead of expected 32 for hash
+		invalidData := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A}
+		err := st.DeserializeFromReader(bytes.NewReader(invalidData))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to read root hash")
+	})
+
+	t.Run("corrupted fees", func(t *testing.T) {
+		st := &Subtree{}
+		// 32 bytes for hash but not enough for fees
+		invalidData := make([]byte, 32)
+		err := st.DeserializeFromReader(bytes.NewReader(invalidData))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to read fees")
+	})
+
+	t.Run("corrupted sizeInBytes", func(t *testing.T) {
+		st := &Subtree{}
+		// 32 bytes for hash + 8 for fees but not enough for sizeInBytes
+		invalidData := make([]byte, 40)
+		err := st.DeserializeFromReader(bytes.NewReader(invalidData))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to read sizeInBytes")
+	})
+
+	t.Run("corrupted node data", func(t *testing.T) {
+		st := &Subtree{}
+		// Create valid header but invalid node data
+		buf := bytes.NewBuffer(nil)
+
+		// Write root hash (32 bytes)
+		rootHash := make([]byte, 32)
+		buf.Write(rootHash)
+
+		// Write fees (8 bytes)
+		feesBytes := make([]byte, 8)
+		buf.Write(feesBytes)
+
+		// Write sizeInBytes (8 bytes)
+		sizeBytes := make([]byte, 8)
+		buf.Write(sizeBytes)
+
+		// Write number of leaves (8 bytes) - say we have 2 nodes
+		numLeavesBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(numLeavesBytes, 2)
+		buf.Write(numLeavesBytes)
+
+		// Write incomplete node data (should be 48 bytes per node, but only write 10)
+		buf.Write(make([]byte, 10))
+
+		err := st.DeserializeFromReader(buf)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to read node")
 	})
 }
 

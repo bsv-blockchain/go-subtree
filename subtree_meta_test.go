@@ -342,3 +342,62 @@ func initMeta(t *testing.T) ([]*bt.Tx, *Subtree, *Meta) {
 
 	return []*bt.Tx{tx1, tx2, tx3, tx4}, subtree, subtreeMeta
 }
+
+func TestNewSubtreeMetaFromBytesErrors(t *testing.T) {
+	t.Run("invalid bytes", func(t *testing.T) {
+		subtree, err := NewTreeByLeafCount(4)
+		require.NoError(t, err)
+
+		invalidBytes := []byte{0x01, 0x02, 0x03}
+		_, err = NewSubtreeMetaFromBytes(subtree, invalidBytes)
+		require.Error(t, err)
+	})
+}
+
+func TestNewSubtreeMetaFromReaderErrors(t *testing.T) {
+	t.Run("invalid reader", func(t *testing.T) {
+		subtree, err := NewTreeByLeafCount(4)
+		require.NoError(t, err)
+
+		invalidBytes := []byte{0x01, 0x02, 0x03}
+		_, err = NewSubtreeMetaFromReader(subtree, bytes.NewReader(invalidBytes))
+		require.Error(t, err)
+	})
+}
+
+func TestMetaSerializeErrors(t *testing.T) {
+	t.Run("nil subtree", func(t *testing.T) {
+		meta := &Meta{
+			Subtree:    nil,
+			TxInpoints: make([]TxInpoints, 0),
+		}
+
+		// Should fail with nil subtree
+		_, err := meta.Serialize()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot serialize, subtree is not set")
+	})
+
+	t.Run("missing parent tx hashes for node", func(t *testing.T) {
+		tx1 := tx.Clone()
+		tx1.Version = 1
+
+		tx2 := tx.Clone()
+		tx2.Version = 2
+
+		subtree, err := NewTreeByLeafCount(4)
+		require.NoError(t, err)
+		require.NoError(t, subtree.AddNode(*tx1.TxIDChainHash(), 1, 1))
+		require.NoError(t, subtree.AddNode(*tx2.TxIDChainHash(), 2, 2))
+
+		meta := NewSubtreeMeta(subtree)
+
+		// Set inpoints for first tx but not for the second
+		require.NoError(t, meta.SetTxInpointsFromTx(tx1))
+
+		// Should fail because second node doesn't have parent tx hashes set
+		_, err = meta.Serialize()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parent tx hashes are not set for node")
+	})
+}
