@@ -13,8 +13,8 @@ func TestTxInpoints(t *testing.T) {
 		p, err := NewTxInpointsFromTx(tx)
 		require.NoError(t, err)
 
-		assert.Equal(t, 1, len(p.ParentTxHashes))
-		assert.Equal(t, 1, len(p.Idxs[0]))
+		assert.Len(t, p.ParentTxHashes, 1)
+		assert.Len(t, p.Idxs[0], 1)
 	})
 
 	t.Run("serialize", func(t *testing.T) {
@@ -23,13 +23,13 @@ func TestTxInpoints(t *testing.T) {
 
 		b, err := p.Serialize()
 		require.NoError(t, err)
-		assert.Equal(t, 44, len(b))
+		assert.Len(t, b, 44)
 
 		p2, err := NewTxInpointsFromBytes(b)
 		require.NoError(t, err)
 
-		assert.Equal(t, 1, len(p2.ParentTxHashes))
-		assert.Equal(t, 1, len(p2.Idxs[0]))
+		assert.Len(t, p2.ParentTxHashes, 1)
+		assert.Len(t, p2.Idxs[0], 1)
 
 		assert.Equal(t, p.ParentTxHashes[0], p2.ParentTxHashes[0])
 		assert.Equal(t, p.Idxs[0][0], p2.Idxs[0][0])
@@ -52,8 +52,8 @@ func TestTxInpoints(t *testing.T) {
 		require.NoError(t, err)
 
 		// make sure they are the same
-		assert.Equal(t, len(p.ParentTxHashes), len(p2.ParentTxHashes))
-		assert.Equal(t, len(p.Idxs), len(p2.Idxs))
+		assert.Len(t, p2.ParentTxHashes, len(p.ParentTxHashes))
+		assert.Len(t, p2.Idxs, len(p.Idxs))
 		assert.Equal(t, p.ParentTxHashes[0], p2.ParentTxHashes[0])
 		assert.Equal(t, p.Idxs[0][0], p2.Idxs[0][0])
 	})
@@ -65,7 +65,7 @@ func TestGetTxInpoints(t *testing.T) {
 
 	// Test getting inpoints
 	inpoints := p.GetTxInpoints()
-	assert.Equal(t, 1, len(inpoints))
+	assert.Len(t, inpoints, 1)
 	assert.Equal(t, uint32(5), inpoints[0].Index)
 	assert.Equal(t, *tx.Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
 }
@@ -103,7 +103,7 @@ func TestGetParentVoutsAtIndex(t *testing.T) {
 		vouts, err := p.GetParentVoutsAtIndex(0)
 		require.NoError(t, err)
 
-		assert.Equal(t, 1, len(vouts))
+		assert.Len(t, vouts, 1)
 		assert.Equal(t, uint32(5), vouts[0])
 	})
 

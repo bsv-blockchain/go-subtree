@@ -90,7 +90,7 @@ func (p *TxInpoints) GetParentTxHashes() []chainhash.Hash {
 // GetParentTxHashAtIndex returns the parent transaction hash at the specified index.
 func (p *TxInpoints) GetParentTxHashAtIndex(index int) (chainhash.Hash, error) {
 	if index >= len(p.ParentTxHashes) {
-		return chainhash.Hash{}, fmt.Errorf("index out of range")
+		return chainhash.Hash{}, ErrIndexOutOfRange
 	}
 
 	return p.ParentTxHashes[index], nil
@@ -115,7 +115,7 @@ func (p *TxInpoints) GetTxInpoints() []Inpoint {
 // GetParentVoutsAtIndex returns the parent transaction output indexes at the specified index.
 func (p *TxInpoints) GetParentVoutsAtIndex(index int) ([]uint32, error) {
 	if index >= len(p.ParentTxHashes) {
-		return nil, fmt.Errorf("index out of range")
+		return nil, ErrIndexOutOfRange
 	}
 
 	return p.Idxs[index], nil
@@ -124,7 +124,7 @@ func (p *TxInpoints) GetParentVoutsAtIndex(index int) ([]uint32, error) {
 // Serialize serializes the TxInpoints object into a byte slice.
 func (p *TxInpoints) Serialize() ([]byte, error) {
 	if len(p.ParentTxHashes) != len(p.Idxs) {
-		return nil, fmt.Errorf("parent tx hashes and indexes length mismatch")
+		return nil, ErrParentTxHashesMismatch
 	}
 
 	bufBytes := make([]byte, 0, 1024) // 1KB (arbitrary size, should be enough for most cases)

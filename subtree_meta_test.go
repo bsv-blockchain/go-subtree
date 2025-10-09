@@ -28,7 +28,7 @@ func TestNewSubtreeMeta(t *testing.T) {
 		_ = subtree.AddNode(*tx1.TxIDChainHash(), 1, 1)
 		subtreeMeta := NewSubtreeMeta(subtree)
 
-		assert.Equal(t, 4, len(subtreeMeta.TxInpoints))
+		assert.Len(t, subtreeMeta.TxInpoints, 4)
 
 		for i := 0; i < 4; i++ {
 			assert.Nil(t, subtreeMeta.TxInpoints[i].ParentTxHashes)
@@ -55,13 +55,13 @@ func TestNewSubtreeMeta(t *testing.T) {
 		err := subtreeMeta.SetTxInpointsFromTx(tx1)
 		require.NoError(t, err)
 
-		assert.Equal(t, 4, len(subtreeMeta.TxInpoints))
+		assert.Len(t, subtreeMeta.TxInpoints, 4)
 
-		assert.Equal(t, 1, len(subtreeMeta.TxInpoints[0].GetParentTxHashes()))
+		assert.Len(t, subtreeMeta.TxInpoints[0].GetParentTxHashes(), 1)
 
 		allParentTxHashes, err := subtreeMeta.GetParentTxHashes(0)
 		require.NoError(t, err)
-		assert.Equal(t, 1, len(allParentTxHashes))
+		assert.Len(t, allParentTxHashes, 1)
 
 		for i := 1; i < 4; i++ {
 			assert.Nil(t, subtreeMeta.TxInpoints[i].ParentTxHashes)
@@ -82,10 +82,10 @@ func TestNewSubtreeMeta(t *testing.T) {
 		_ = subtreeMeta.SetTxInpointsFromTx(tx3)
 		_ = subtreeMeta.SetTxInpointsFromTx(tx4)
 
-		assert.Equal(t, 4, len(subtreeMeta.TxInpoints))
+		assert.Len(t, subtreeMeta.TxInpoints, 4)
 
 		for i := 1; i < 4; i++ {
-			assert.Equal(t, 1, len(subtreeMeta.TxInpoints[i].GetParentTxHashes()))
+			assert.Len(t, subtreeMeta.TxInpoints[i].GetParentTxHashes(), 1)
 		}
 	})
 }
@@ -117,7 +117,7 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, subtreeMeta.rootHash, subtreeMeta2.rootHash)
-		assert.Equal(t, len(subtreeMeta.TxInpoints), len(subtreeMeta2.TxInpoints))
+		assert.Len(t, subtreeMeta2.TxInpoints, len(subtreeMeta.TxInpoints))
 
 		for i := 0; i < 4; i++ {
 			if subtreeMeta.TxInpoints[i].ParentTxHashes == nil {
@@ -125,7 +125,7 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 				continue
 			}
 
-			assert.Equal(t, len(subtreeMeta.TxInpoints[i].GetParentTxHashes()), len(subtreeMeta2.TxInpoints[i].GetParentTxHashes()))
+			assert.Len(t, subtreeMeta2.TxInpoints[i].GetParentTxHashes(), len(subtreeMeta.TxInpoints[i].GetParentTxHashes()))
 
 			for j := 0; j < len(subtreeMeta.TxInpoints[i].GetParentTxHashes()); j++ {
 				assert.Equal(t, subtreeMeta.TxInpoints[i].GetParentTxHashes()[j], subtreeMeta2.TxInpoints[i].GetParentTxHashes()[j])
@@ -148,7 +148,7 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, subtreeMeta.rootHash, subtreeMeta2.rootHash)
-		assert.Equal(t, len(subtreeMeta.TxInpoints), len(subtreeMeta2.TxInpoints))
+		assert.Len(t, subtreeMeta2.TxInpoints, len(subtreeMeta.TxInpoints))
 
 		for i := 0; i < 4; i++ {
 			if subtreeMeta.TxInpoints[i].ParentTxHashes == nil {
@@ -156,7 +156,7 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 				continue
 			}
 
-			assert.Equal(t, len(subtreeMeta.TxInpoints[i].GetParentTxHashes()), len(subtreeMeta2.TxInpoints[i].GetParentTxHashes()))
+			assert.Len(t, subtreeMeta2.TxInpoints[i].GetParentTxHashes(), len(subtreeMeta.TxInpoints[i].GetParentTxHashes()))
 
 			for j := 0; j < len(subtreeMeta.TxInpoints[i].GetParentTxHashes()); j++ {
 				assert.Equal(t, subtreeMeta.TxInpoints[i].GetParentTxHashes()[j], subtreeMeta2.TxInpoints[i].GetParentTxHashes()[j])
@@ -186,13 +186,13 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, subtreeMeta.rootHash, subtreeMeta2.rootHash)
-		assert.Equal(t, len(subtreeMeta.TxInpoints), len(subtreeMeta2.TxInpoints))
+		assert.Len(t, subtreeMeta2.TxInpoints, len(subtreeMeta.TxInpoints))
 
 		assert.Equal(t, subtree2.Size(), cap(subtreeMeta.TxInpoints))
 	})
 
 	t.Run("TestNewSubtreeMetaFromBytes with all set", func(t *testing.T) {
-		_, subtree, subtreeMeta := initSubtreeMeta(t)
+		_, subtree, subtreeMeta := initMeta(t)
 
 		b, err := subtreeMeta.Serialize()
 		require.NoError(t, err)
@@ -200,10 +200,10 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, subtreeMeta.rootHash, subtreeMeta2.rootHash)
-		assert.Equal(t, len(subtreeMeta.TxInpoints), len(subtreeMeta2.TxInpoints))
+		assert.Len(t, subtreeMeta2.TxInpoints, len(subtreeMeta.TxInpoints))
 
 		for i := 0; i < 4; i++ {
-			assert.Equal(t, len(subtreeMeta.TxInpoints[i].GetParentTxHashes()), len(subtreeMeta2.TxInpoints[i].GetParentTxHashes()))
+			assert.Len(t, subtreeMeta2.TxInpoints[i].GetParentTxHashes(), len(subtreeMeta.TxInpoints[i].GetParentTxHashes()))
 
 			for j := 0; j < len(subtreeMeta.TxInpoints[i].GetParentTxHashes()); j++ {
 				assert.Equal(t, subtreeMeta.TxInpoints[i].GetParentTxHashes()[j], subtreeMeta2.TxInpoints[i].GetParentTxHashes()[j])
@@ -213,14 +213,14 @@ func TestNewSubtreeMetaFromBytes(t *testing.T) {
 }
 
 func TestNewSubtreeMetaGetParentTxHashes(t *testing.T) {
-	txs, _, subtreeMeta := initSubtreeMeta(t)
+	txs, _, subtreeMeta := initMeta(t)
 
 	t.Run("TestGetParentTxHashes", func(t *testing.T) {
 		for i := 0; i < 4; i++ {
 			allParentTxHashes, err := subtreeMeta.GetParentTxHashes(i)
 			require.NoError(t, err)
 
-			assert.Equal(t, 1, len(allParentTxHashes))
+			assert.Len(t, allParentTxHashes, 1)
 			assert.Equal(t, *txs[i].Inputs[0].PreviousTxIDChainHash(), allParentTxHashes[0])
 		}
 	})
@@ -232,17 +232,17 @@ func TestNewSubtreeMetaGetParentTxHashes(t *testing.T) {
 	})
 }
 
-func TestSubtreeMetaGetTxInpoints(t *testing.T) {
-	txs, _, subtreeMeta := initSubtreeMeta(t)
+func TestMetaGetTxInpoints(t *testing.T) {
+	txs, _, subtreeMeta := initMeta(t)
 
 	t.Run("empty subtree", func(t *testing.T) {
 		subtree, _ := NewTreeByLeafCount(4)
-		emptySubtreeMeta := NewSubtreeMeta(subtree)
+		emptyMeta := NewSubtreeMeta(subtree)
 
-		inpoints, err := emptySubtreeMeta.GetTxInpoints(0)
+		inpoints, err := emptyMeta.GetTxInpoints(0)
 		require.NoError(t, err)
 
-		assert.Equal(t, 0, len(inpoints))
+		assert.Empty(t, inpoints)
 	})
 
 	t.Run("out of range index", func(t *testing.T) {
@@ -257,16 +257,16 @@ func TestSubtreeMetaGetTxInpoints(t *testing.T) {
 			inpoints, err := subtreeMeta.GetTxInpoints(0)
 			require.NoError(t, err)
 
-			assert.Equal(t, 1, len(inpoints))
+			assert.Len(t, inpoints, 1)
 			assert.Equal(t, *txs[i].Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
 			assert.Equal(t, txs[i].Inputs[0].PreviousTxOutIndex, inpoints[0].Index)
 		}
 	})
 }
 
-func TestSubtreeMetaSetTxInpoints(t *testing.T) {
+func TestMetaSetTxInpoints(t *testing.T) {
 	t.Run("TestSetTxInpointsFromTx", func(t *testing.T) {
-		txs, _, subtreeMeta := initSubtreeMeta(t)
+		txs, _, subtreeMeta := initMeta(t)
 
 		for i := 0; i < 4; i++ {
 			err := subtreeMeta.SetTxInpointsFromTx(txs[i])
@@ -275,14 +275,14 @@ func TestSubtreeMetaSetTxInpoints(t *testing.T) {
 			inpoints, err := subtreeMeta.GetTxInpoints(i)
 			require.NoError(t, err)
 
-			assert.Equal(t, 1, len(inpoints))
+			assert.Len(t, inpoints, 1)
 			assert.Equal(t, *txs[i].Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
 			assert.Equal(t, txs[i].Inputs[0].PreviousTxOutIndex, inpoints[0].Index)
 		}
 	})
 
 	t.Run("TestSetTxInpoints", func(t *testing.T) {
-		txs, _, subtreeMeta := initSubtreeMeta(t)
+		txs, _, subtreeMeta := initMeta(t)
 
 		// Test setting inpoints for a subtree node that does not exist
 		err := subtreeMeta.SetTxInpoints(2, TxInpoints{
@@ -295,7 +295,7 @@ func TestSubtreeMetaSetTxInpoints(t *testing.T) {
 		inpoints, err := subtreeMeta.GetTxInpoints(2)
 		require.NoError(t, err)
 
-		assert.Equal(t, 3, len(inpoints))
+		assert.Len(t, inpoints, 3)
 		assert.Equal(t, *txs[0].Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
 		assert.Equal(t, *txs[0].Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
 		assert.Equal(t, *txs[0].Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
@@ -314,7 +314,7 @@ func TestSubtreeMetaSetTxInpoints(t *testing.T) {
 	})
 }
 
-func initSubtreeMeta(t *testing.T) ([]*bt.Tx, *Subtree, *SubtreeMeta) {
+func initMeta(t *testing.T) ([]*bt.Tx, *Subtree, *Meta) {
 	tx1 := tx.Clone()
 	tx1.Version = 1
 

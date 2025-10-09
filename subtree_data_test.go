@@ -2,7 +2,6 @@ package subtree
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"testing"
 
@@ -40,8 +39,8 @@ func TestNewSubtreeData(t *testing.T) {
 
 		// Verify the subtree data
 		assert.Equal(t, subtree, subtreeData.Subtree)
-		assert.Equal(t, subtree.Size(), len(subtreeData.Txs))
-		assert.Equal(t, 4, len(subtreeData.Txs))
+		assert.Len(t, subtreeData.Txs, subtree.Size())
+		assert.Len(t, subtreeData.Txs, 4)
 
 		// All transactions should be initially nil
 		for i := 0; i < len(subtreeData.Txs); i++ {
@@ -106,7 +105,7 @@ func TestNewSubtreeData(t *testing.T) {
 	})
 }
 
-func setupSubtreeData(t *testing.T) (*Subtree, *SubtreeData) {
+func setupData(t *testing.T) (*Subtree, *Data) {
 	tx1 := tx.Clone()
 	tx1.Version = 1
 
@@ -152,7 +151,7 @@ func TestSerialize(t *testing.T) {
 	tx4.Version = 4
 
 	t.Run("serialize subtree data", func(t *testing.T) {
-		_, subtreeData := setupSubtreeData(t)
+		_, subtreeData := setupData(t)
 
 		// Serialize the subtree data
 		serializedData, err := subtreeData.Serialize()
@@ -163,7 +162,7 @@ func TestSerialize(t *testing.T) {
 	})
 
 	t.Run("serialize with nil subtree", func(t *testing.T) {
-		subtreeData := &SubtreeData{
+		subtreeData := &Data{
 			Subtree: nil,
 			Txs:     make([]*bt.Tx, 0),
 		}
@@ -223,7 +222,7 @@ func TestSerialize(t *testing.T) {
 
 func TestNewSubtreeDataFromBytes(t *testing.T) {
 	t.Run("create from valid bytes", func(t *testing.T) {
-		subtree, origData := setupSubtreeData(t)
+		subtree, origData := setupData(t)
 
 		// Serialize the original data
 		serializedData, err := origData.Serialize()
@@ -235,7 +234,7 @@ func TestNewSubtreeDataFromBytes(t *testing.T) {
 
 		// Verify the new subtree data
 		assert.Equal(t, subtree, newData.Subtree)
-		assert.Equal(t, len(origData.Txs), len(newData.Txs))
+		assert.Len(t, newData.Txs, len(origData.Txs))
 
 		// Compare transactions (skipping first if it's a coinbase placeholder)
 		startIdx := 0
@@ -251,7 +250,7 @@ func TestNewSubtreeDataFromBytes(t *testing.T) {
 	})
 
 	t.Run("create from invalid bytes", func(t *testing.T) {
-		subtree, _ := setupSubtreeData(t)
+		subtree, _ := setupData(t)
 
 		// Create invalid serialized data
 		invalidData := []byte("invalid data")
@@ -265,7 +264,7 @@ func TestNewSubtreeDataFromBytes(t *testing.T) {
 
 func TestNewSubtreeDataFromReader(t *testing.T) {
 	t.Run("create from valid reader", func(t *testing.T) {
-		subtree, origData := setupSubtreeData(t)
+		subtree, origData := setupData(t)
 
 		// Serialize the original data
 		serializedData, err := origData.Serialize()
@@ -295,18 +294,18 @@ func TestNewSubtreeDataFromReader(t *testing.T) {
 	})
 
 	t.Run("create from invalid reader", func(t *testing.T) {
-		subtree, _ := setupSubtreeData(t)
+		subtree, _ := setupData(t)
 
 		// Create invalid reader that returns EOF
 		reader := &mockReader{err: io.EOF}
 
 		// Create new subtree data from invalid reader
 		newData, err := NewSubtreeDataFromReader(subtree, reader)
-		assert.NoError(t, err) // EOF is handled specially and considered normal end of data
+		require.NoError(t, err) // EOF is handled specially and considered normal end of data
 		assert.NotNil(t, newData)
 
 		// Create invalid reader that returns error other than EOF
-		reader = &mockReader{err: fmt.Errorf("read error")}
+		reader = &mockReader{err: ErrReadError}
 
 		// Create new subtree data from invalid reader should fail
 		newData, err = NewSubtreeDataFromReader(subtree, reader)
@@ -320,6 +319,6 @@ type mockReader struct {
 	err error
 }
 
-func (r *mockReader) Read(p []byte) (n int, err error) {
+func (r *mockReader) Read(_ []byte) (n int, err error) {
 	return 0, r.err
 }

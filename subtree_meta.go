@@ -11,7 +11,8 @@ import (
 	safe "github.com/bsv-blockchain/go-safe-conversion"
 )
 
-type SubtreeMeta struct {
+// Meta represents metadata for a subtree, including transaction inpoints
+type Meta struct {
 	// Subtree is the subtree this meta is for
 	Subtree *Subtree
 	// TxInpoints is a lookup of the parent tx inpoints for each node in the subtree
@@ -21,7 +22,7 @@ type SubtreeMeta struct {
 	rootHash chainhash.Hash
 }
 
-// NewSubtreeMeta creates a new SubtreeMeta object
+// NewSubtreeMeta creates a new Meta object
 // the size parameter is the number of nodes in the subtree,
 // the index in that array should match the index of the node in the subtree
 //
@@ -29,26 +30,26 @@ type SubtreeMeta struct {
 //   - subtree: The subtree for which to create the meta
 //
 // Returns:
-//   - *SubtreeMeta: A new SubtreeMeta object with the specified subtree and an empty TxInpoints slice
-func NewSubtreeMeta(subtree *Subtree) *SubtreeMeta {
-	return &SubtreeMeta{
+//   - *Meta: A new Meta object with the specified subtree and an empty TxInpoints slice
+func NewSubtreeMeta(subtree *Subtree) *Meta {
+	return &Meta{
 		Subtree:    subtree,
 		TxInpoints: make([]TxInpoints, subtree.Size()),
 	}
 }
 
-// NewSubtreeMetaFromBytes creates a new SubtreeMeta object from the provided byte slice.
-// It reads the subtree meta data from the byte slice and populates the SubtreeMeta struct.
+// NewSubtreeMetaFromBytes creates a new Meta object from the provided byte slice.
+// It reads the subtree meta data from the byte slice and populates the Meta struct.
 //
 // Parameters:
 //   - subtree: The subtree for which to create the meta
 //   - dataBytes: The byte slice containing the serialized subtree meta data
 //
 // Returns:
-//   - *SubtreeMeta: A new SubtreeMeta object populated with data from the byte slice
+//   - *Meta: A new Meta object populated with data from the byte slice
 //   - error: An error if the deserialization fails
-func NewSubtreeMetaFromBytes(subtree *Subtree, dataBytes []byte) (*SubtreeMeta, error) {
-	s := &SubtreeMeta{
+func NewSubtreeMetaFromBytes(subtree *Subtree, dataBytes []byte) (*Meta, error) {
+	s := &Meta{
 		Subtree: subtree,
 	}
 	if err := s.deserializeFromReader(bytes.NewReader(dataBytes)); err != nil {
@@ -58,17 +59,17 @@ func NewSubtreeMetaFromBytes(subtree *Subtree, dataBytes []byte) (*SubtreeMeta, 
 	return s, nil
 }
 
-// NewSubtreeMetaFromReader creates a new SubtreeMeta object from the provided reader.
+// NewSubtreeMetaFromReader creates a new Meta object from the provided reader.
 //
 // Parameters:
 //   - subtree: The subtree for which to create the meta
 //   - dataReader: The reader from which to read the subtree meta data
 //
 // Returns:
-//   - *SubtreeMeta: A new SubtreeMeta object populated with data from the reader
+//   - *Meta: A new Meta object populated with data from the reader
 //   - error: An error if the deserialization fails
-func NewSubtreeMetaFromReader(subtree *Subtree, dataReader io.Reader) (*SubtreeMeta, error) {
-	s := &SubtreeMeta{
+func NewSubtreeMetaFromReader(subtree *Subtree, dataReader io.Reader) (*Meta, error) {
+	s := &Meta{
 		Subtree:    subtree,
 		TxInpoints: make([]TxInpoints, subtree.Size()),
 	}
@@ -89,9 +90,9 @@ func NewSubtreeMetaFromReader(subtree *Subtree, dataReader io.Reader) (*SubtreeM
 // Returns:
 //   - []chainhash.Hash: The unique parent transaction hashes for the specified index
 //   - error: An error if the index is out of range or if there is an issue retrieving the parent transaction hashes
-func (s *SubtreeMeta) GetParentTxHashes(index int) ([]chainhash.Hash, error) {
+func (s *Meta) GetParentTxHashes(index int) ([]chainhash.Hash, error) {
 	if index >= len(s.TxInpoints) {
-		return nil, fmt.Errorf("index out of range")
+		return nil, ErrIndexOutOfRange
 	}
 
 	return s.TxInpoints[index].GetParentTxHashes(), nil
@@ -106,9 +107,9 @@ func (s *SubtreeMeta) GetParentTxHashes(index int) ([]chainhash.Hash, error) {
 // Returns:
 //   - []meta.Inpoint: The TxInpoints for the specified index
 //   - error: An error if the index is out of range or if there is an issue retrieving the TxInpoints
-func (s *SubtreeMeta) GetTxInpoints(index int) ([]Inpoint, error) {
+func (s *Meta) GetTxInpoints(index int) ([]Inpoint, error) {
 	if index >= len(s.TxInpoints) {
-		return nil, fmt.Errorf("index out of range getting tx inpoints")
+		return nil, fmt.Errorf("getting tx inpoints: %w", ErrIndexOutOfRange)
 	}
 
 	return s.TxInpoints[index].GetTxInpoints(), nil
@@ -123,10 +124,10 @@ func (s *SubtreeMeta) GetTxInpoints(index int) ([]Inpoint, error) {
 //
 // Returns:
 //   - error: An error if the transaction is not found in the subtree or if there is an issue creating the TxInpoints
-func (s *SubtreeMeta) SetTxInpointsFromTx(tx *bt.Tx) error {
+func (s *Meta) SetTxInpointsFromTx(tx *bt.Tx) error {
 	index := s.Subtree.NodeIndex(*tx.TxIDChainHash())
 	if index == -1 {
-		return fmt.Errorf("[SetParentTxHashesFromTx][%s] node not found in subtree", tx.TxID())
+		return fmt.Errorf("[SetParentTxHashesFromTx][%s] %w", tx.TxID(), ErrNodeNotFound)
 	}
 
 	p, err := NewTxInpointsFromTx(tx)
@@ -148,9 +149,9 @@ func (s *SubtreeMeta) SetTxInpointsFromTx(tx *bt.Tx) error {
 //
 // Returns:
 //   - error: An error if the index is out of range
-func (s *SubtreeMeta) SetTxInpoints(idx int, txInpoints TxInpoints) error {
+func (s *Meta) SetTxInpoints(idx int, txInpoints TxInpoints) error {
 	if idx >= len(s.TxInpoints) {
-		return fmt.Errorf("index out of range")
+		return ErrIndexOutOfRange
 	}
 
 	s.TxInpoints[idx] = txInpoints
@@ -159,19 +160,19 @@ func (s *SubtreeMeta) SetTxInpoints(idx int, txInpoints TxInpoints) error {
 }
 
 // Serialize returns the serialized form of the subtree meta
-func (s *SubtreeMeta) Serialize() ([]byte, error) {
+func (s *Meta) Serialize() ([]byte, error) {
 	var err error
 
 	// only serialize when we have the matching subtree
 	if s.Subtree == nil {
-		return nil, fmt.Errorf("cannot serialize, subtree is not set")
+		return nil, ErrCannotSerializeSubtreeNotSet
 	}
 
 	// check the data in the subtree matches the data in the parent tx hashes
 	subtreeLen := s.Subtree.Length()
 	for i := 0; i < subtreeLen; i++ {
 		if i != 0 && s.TxInpoints[i].ParentTxHashes == nil {
-			return nil, fmt.Errorf("cannot serialize, parent tx hashes are not set for node %d: %s", i, s.Subtree.Nodes[i].Hash.String())
+			return nil, fmt.Errorf("cannot serialize, parent tx hashes are not set for node %d: %s: %w", i, s.Subtree.Nodes[i].Hash.String(), ErrCannotSerializeSubtreeNotSet)
 		}
 	}
 
@@ -193,14 +194,14 @@ func (s *SubtreeMeta) Serialize() ([]byte, error) {
 }
 
 // deserializeFromReader reads the subtree meta from the provided reader
-// and populates the SubtreeMeta struct with the data.
+// and populates the Meta struct with the data.
 //
 // Parameters:
 //   - buf: The reader from which to read the subtree meta data
 //
 // Returns:
 //   - error: An error if the deserialization fails
-func (s *SubtreeMeta) deserializeFromReader(buf io.Reader) error {
+func (s *Meta) deserializeFromReader(buf io.Reader) error {
 	var (
 		err       error
 		dataBytes [4]byte
@@ -228,7 +229,7 @@ func (s *SubtreeMeta) deserializeFromReader(buf io.Reader) error {
 }
 
 // deserializeTxInpointsFromReader reads the TxInpoints from the provided reader
-// and populates the TxInpoints slice in the SubtreeMeta.
+// and populates the TxInpoints slice in the Meta.
 //
 // Parameters:
 //   - buf: The reader from which to read the TxInpoints
@@ -236,7 +237,7 @@ func (s *SubtreeMeta) deserializeFromReader(buf io.Reader) error {
 //
 // Returns:
 //   - error: An error if the deserialization fails
-func (s *SubtreeMeta) deserializeTxInpointsFromReader(buf io.Reader, txInpointsLen uint32) error {
+func (s *Meta) deserializeTxInpointsFromReader(buf io.Reader, txInpointsLen uint32) error {
 	var (
 		err        error
 		txInpoints TxInpoints
@@ -254,8 +255,8 @@ func (s *SubtreeMeta) deserializeTxInpointsFromReader(buf io.Reader, txInpointsL
 	return nil
 }
 
-// serializeTxInpoints serializes the TxInpoints of the SubtreeMeta into the provided buffer.
-func (s *SubtreeMeta) serializeTxInpoints(buf *bytes.Buffer) error {
+// serializeTxInpoints serializes the TxInpoints of the Meta into the provided buffer.
+func (s *Meta) serializeTxInpoints(buf *bytes.Buffer) error {
 	var (
 		err         error
 		bytesUint32 [4]byte

@@ -5,6 +5,7 @@ import (
 	"math/bits"
 )
 
+// CeilPowerOfTwo returns the smallest power of two that is greater than or equal to the given number
 func CeilPowerOfTwo(num int) int {
 	if num <= 0 {
 		return 1
@@ -19,6 +20,7 @@ func CeilPowerOfTwo(num int) int {
 	return ceilValue
 }
 
+// IsPowerOfTwo returns true if the given number is a power of two
 func IsPowerOfTwo(num int) bool {
 	if num <= 0 {
 		return false

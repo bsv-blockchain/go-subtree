@@ -12,7 +12,7 @@ import (
 // GetMerkleProofForCoinbase returns a merkle proof for the coinbase transaction
 func GetMerkleProofForCoinbase(subtrees []*Subtree) ([]*chainhash.Hash, error) {
 	if len(subtrees) == 0 {
-		return nil, fmt.Errorf("no subtrees available")
+		return nil, ErrNoSubtreesAvailable
 	}
 
 	merkleProof, err := subtrees[0].GetMerkleProof(0)
@@ -42,7 +42,7 @@ func GetMerkleProofForCoinbase(subtrees []*Subtree) ([]*chainhash.Hash, error) {
 }
 
 // BuildMerkleTreeStoreFromBytes builds a merkle tree from the given nodes.
-func BuildMerkleTreeStoreFromBytes(nodes []SubtreeNode) (*[]chainhash.Hash, error) {
+func BuildMerkleTreeStoreFromBytes(nodes []Node) (*[]chainhash.Hash, error) {
 	if len(nodes) == 0 {
 		return &[]chainhash.Hash{}, nil
 	}
@@ -94,7 +94,7 @@ func BuildMerkleTreeStoreFromBytes(nodes []SubtreeNode) (*[]chainhash.Hash, erro
 }
 
 // calcMerkles calculates the merkle hashes for the given nodes in the range
-func calcMerkles(nodes []SubtreeNode, merkleFrom, merkleTo, nextPoT, length int, merkles []chainhash.Hash) {
+func calcMerkles(nodes []Node, merkleFrom, merkleTo, nextPoT, length int, merkles []chainhash.Hash) {
 	var offset int
 
 	var currentMerkle chainhash.Hash
@@ -103,30 +103,37 @@ func calcMerkles(nodes []SubtreeNode, merkleFrom, merkleTo, nextPoT, length int,
 
 	for i := merkleFrom; i < merkleTo; i += 2 {
 		offset = i / 2
-
-		if i < nextPoT {
-			if i >= length {
-				currentMerkle = chainhash.Hash{}
-			} else {
-				currentMerkle = nodes[i].Hash
-			}
-
-			if i+1 >= length {
-				currentMerkle1 = chainhash.Hash{}
-			} else {
-				currentMerkle1 = nodes[i+1].Hash
-			}
-		} else {
-			currentMerkle = merkles[i-nextPoT]
-			currentMerkle1 = merkles[i-nextPoT+1]
-		}
-
+		currentMerkle, currentMerkle1 = getMerklePair(nodes, merkles, i, nextPoT, length)
 		merkles[offset] = calcMerkle(currentMerkle, currentMerkle1)
 	}
 }
 
+// getMerklePair returns a pair of merkle hashes at the given index
+func getMerklePair(nodes []Node, merkles []chainhash.Hash, i, nextPoT, length int) (chainhash.Hash, chainhash.Hash) {
+	var currentMerkle, currentMerkle1 chainhash.Hash
+
+	if i < nextPoT {
+		currentMerkle = getNodeHashAt(nodes, i, length)
+		currentMerkle1 = getNodeHashAt(nodes, i+1, length)
+	} else {
+		currentMerkle = merkles[i-nextPoT]
+		currentMerkle1 = merkles[i-nextPoT+1]
+	}
+
+	return currentMerkle, currentMerkle1
+}
+
+// getNodeHashAt returns the hash at the given index, or an empty hash if out of bounds
+func getNodeHashAt(nodes []Node, index, length int) chainhash.Hash {
+	if index >= length {
+		return chainhash.Hash{}
+	}
+
+	return nodes[index].Hash
+}
+
 // calcMerkle calculates the parent node hash from the left and right child nodes
-func calcMerkle(currentMerkle chainhash.Hash, currentMerkle1 chainhash.Hash) [32]byte {
+func calcMerkle(currentMerkle, currentMerkle1 chainhash.Hash) [32]byte {
 	switch {
 	// When there is no left child node, the parent is nil ("") too.
 	case currentMerkle.Equal(chainhash.Hash{}):

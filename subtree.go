@@ -15,8 +15,8 @@ import (
 	txmap "github.com/bsv-blockchain/go-tx-map"
 )
 
-// SubtreeNode represents a node in the subtree.
-type SubtreeNode struct {
+// Node represents a node in the subtree.
+type Node struct {
 	Hash        chainhash.Hash `json:"txid"` // This is called txid so that the UI knows to add a link to /tx/<txid>
 	Fee         uint64         `json:"fee"`
 	SizeInBytes uint64         `json:"size"`
@@ -28,7 +28,7 @@ type Subtree struct {
 	Fees             uint64
 	SizeInBytes      uint64
 	FeeHash          chainhash.Hash
-	Nodes            []SubtreeNode
+	Nodes            []Node
 	ConflictingNodes []chainhash.Hash // conflicting nodes need to be checked when doing block assembly
 
 	// temporary (calculated) variables
@@ -57,13 +57,13 @@ type TxMap interface {
 //	is the number if levels in a merkle tree of the subtree
 func NewTree(height int) (*Subtree, error) {
 	if height < 0 {
-		return nil, fmt.Errorf("height must be at least 0")
+		return nil, ErrHeightNegative
 	}
 
 	treeSize := int(math.Pow(2, float64(height)))
 
 	return &Subtree{
-		Nodes:    make([]SubtreeNode, 0, treeSize),
+		Nodes:    make([]Node, 0, treeSize),
 		Height:   height,
 		FeeHash:  chainhash.Hash{},
 		treeSize: treeSize,
@@ -75,7 +75,7 @@ func NewTree(height int) (*Subtree, error) {
 // NewTreeByLeafCount creates a new Subtree with a height calculated from the maximum number of leaves.
 func NewTreeByLeafCount(maxNumberOfLeaves int) (*Subtree, error) {
 	if !IsPowerOfTwo(maxNumberOfLeaves) {
-		return nil, fmt.Errorf("numberOfLeaves must be a power of two")
+		return nil, ErrNotPowerOfTwo
 	}
 
 	height := math.Ceil(math.Log2(float64(maxNumberOfLeaves)))
@@ -161,7 +161,7 @@ func (st *Subtree) Duplicate() *Subtree {
 		Fees:             st.Fees,
 		SizeInBytes:      st.SizeInBytes,
 		FeeHash:          st.FeeHash,
-		Nodes:            make([]SubtreeNode, len(st.Nodes)),
+		Nodes:            make([]Node, len(st.Nodes)),
 		ConflictingNodes: make([]chainhash.Hash, len(st.ConflictingNodes)),
 		rootHash:         st.rootHash,
 		treeSize:         st.treeSize,
@@ -203,15 +203,15 @@ func (st *Subtree) IsComplete() bool {
 }
 
 // ReplaceRootNode replaces the root node of the subtree with the given node and returns the new root hash.
-func (st *Subtree) ReplaceRootNode(node *chainhash.Hash, fee uint64, sizeInBytes uint64) *chainhash.Hash {
+func (st *Subtree) ReplaceRootNode(node *chainhash.Hash, fee, sizeInBytes uint64) *chainhash.Hash {
 	if len(st.Nodes) < 1 {
-		st.Nodes = append(st.Nodes, SubtreeNode{
+		st.Nodes = append(st.Nodes, Node{
 			Hash:        *node,
 			Fee:         fee,
 			SizeInBytes: sizeInBytes,
 		})
 	} else {
-		st.Nodes[0] = SubtreeNode{
+		st.Nodes[0] = Node{
 			Hash:        *node,
 			Fee:         fee,
 			SizeInBytes: sizeInBytes,
@@ -224,17 +224,17 @@ func (st *Subtree) ReplaceRootNode(node *chainhash.Hash, fee uint64, sizeInBytes
 	return st.RootHash()
 }
 
-// AddSubtreeNode adds a SubtreeNode to the subtree.
-func (st *Subtree) AddSubtreeNode(node SubtreeNode) error {
+// AddSubtreeNode adds a Node to the subtree.
+func (st *Subtree) AddSubtreeNode(node Node) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
 	if (len(st.Nodes) + 1) > st.treeSize {
-		return fmt.Errorf("subtree is full")
+		return ErrSubtreeFull
 	}
 
 	if node.Hash.Equal(CoinbasePlaceholder) {
-		return fmt.Errorf("[AddSubtreeNode] coinbase placeholder node should be added with AddCoinbaseNode, tree length is %d", len(st.Nodes))
+		return fmt.Errorf("[AddSubtreeNode] %w, tree length is %d", ErrCoinbasePlaceholderMisuse, len(st.Nodes))
 	}
 
 	// AddNode is not concurrency safe, so we can reuse the same byte arrays
@@ -262,10 +262,10 @@ func (st *Subtree) AddSubtreeNode(node SubtreeNode) error {
 // AddCoinbaseNode adds a coinbase node to the subtree.
 func (st *Subtree) AddCoinbaseNode() error {
 	if len(st.Nodes) != 0 {
-		return fmt.Errorf("subtree should be empty before adding a coinbase node")
+		return ErrSubtreeNotEmpty
 	}
 
-	st.Nodes = append(st.Nodes, SubtreeNode{
+	st.Nodes = append(st.Nodes, Node{
 		Hash:        CoinbasePlaceholder,
 		Fee:         0,
 		SizeInBytes: 0,
@@ -294,7 +294,7 @@ func (st *Subtree) AddConflictingNode(newConflictingNode chainhash.Hash) error {
 	}
 
 	if !found {
-		return fmt.Errorf("conflicting node is not in the subtree")
+		return ErrConflictingNodeNotInSubtree
 	}
 
 	// check whether the conflicting node has already been added
@@ -319,13 +319,13 @@ func (st *Subtree) AddConflictingNode(newConflictingNode chainhash.Hash) error {
 //
 // Returns:
 //   - error: an error if the node could not be added
-func (st *Subtree) AddNode(node chainhash.Hash, fee uint64, sizeInBytes uint64) error {
+func (st *Subtree) AddNode(node chainhash.Hash, fee, sizeInBytes uint64) error {
 	if (len(st.Nodes) + 1) > st.treeSize {
-		return fmt.Errorf("subtree is full")
+		return ErrSubtreeFull
 	}
 
 	if node.Equal(CoinbasePlaceholder) {
-		return fmt.Errorf("[AddNode] coinbase placeholder node should be added with AddCoinbaseNode")
+		return fmt.Errorf("[AddNode] %w", ErrCoinbasePlaceholderMisuse)
 	}
 
 	// AddNode is not concurrency safe, so we can reuse the same byte arrays
@@ -337,7 +337,7 @@ func (st *Subtree) AddNode(node chainhash.Hash, fee uint64, sizeInBytes uint64) 
 	//	st.FeeHash = chainhash.HashH(append(st.FeeHash[:], st.feeHashBytes...))
 	// }
 
-	st.Nodes = append(st.Nodes, SubtreeNode{
+	st.Nodes = append(st.Nodes, Node{
 		Hash:        node,
 		Fee:         fee,
 		SizeInBytes: sizeInBytes,
@@ -360,7 +360,7 @@ func (st *Subtree) RemoveNodeAtIndex(index int) error {
 	defer st.mu.Unlock()
 
 	if index >= len(st.Nodes) {
-		return fmt.Errorf("index out of range")
+		return ErrIndexOutOfRange
 	}
 
 	st.Fees -= st.Nodes[index].Fee
@@ -404,9 +404,9 @@ func (st *Subtree) RootHash() *chainhash.Hash {
 }
 
 // RootHashWithReplaceRootNode replaces the root node of the subtree with the given node and returns the new root hash.
-func (st *Subtree) RootHashWithReplaceRootNode(node *chainhash.Hash, fee uint64, sizeInBytes uint64) (*chainhash.Hash, error) {
+func (st *Subtree) RootHashWithReplaceRootNode(node *chainhash.Hash, fee, sizeInBytes uint64) (*chainhash.Hash, error) {
 	if st == nil {
-		return nil, fmt.Errorf("subtree is nil")
+		return nil, ErrSubtreeNil
 	}
 
 	// clone the subtree, so we do not overwrite anything in it
@@ -466,20 +466,20 @@ func (st *Subtree) HasNode(hash chainhash.Hash) bool {
 	return st.NodeIndex(hash) != -1
 }
 
-// GetNode returns the SubtreeNode with the given hash, or an error if it does not exist.
-func (st *Subtree) GetNode(hash chainhash.Hash) (*SubtreeNode, error) {
+// GetNode returns the Node with the given hash, or an error if it does not exist.
+func (st *Subtree) GetNode(hash chainhash.Hash) (*Node, error) {
 	nodeIndex := st.NodeIndex(hash)
 	if nodeIndex != -1 {
 		return &st.Nodes[nodeIndex], nil
 	}
 
-	return nil, fmt.Errorf("node not found")
+	return nil, ErrNodeNotFound
 }
 
 // Difference returns the nodes in the subtree that are not present in the given TxMap.
-func (st *Subtree) Difference(ids TxMap) ([]SubtreeNode, error) {
+func (st *Subtree) Difference(ids TxMap) ([]Node, error) {
 	// return all the ids that are in st.Nodes, but not in ids
-	diff := make([]SubtreeNode, 0, 1_000)
+	diff := make([]Node, 0, 1_000)
 
 	for _, node := range st.Nodes {
 		if !ids.Exists(node.Hash) {
@@ -494,7 +494,7 @@ func (st *Subtree) Difference(ids TxMap) ([]SubtreeNode, error) {
 // TODO rewrite this to calculate this from the subtree nodes needed, and not the whole tree
 func (st *Subtree) GetMerkleProof(index int) ([]*chainhash.Hash, error) {
 	if index >= len(st.Nodes) {
-		return nil, fmt.Errorf("index out of range")
+		return nil, ErrIndexOutOfRange
 	}
 
 	merkleTree, err := BuildMerkleTreeStoreFromBytes(st.Nodes)
@@ -512,23 +512,10 @@ func (st *Subtree) GetMerkleProof(index int) ([]*chainhash.Hash, error) {
 	for i := height; i > 0; i-- {
 		if i == height {
 			// we are at the leaf level and read from the Nodes array
-			if index%2 == 0 {
-				nodes = append(nodes, &st.Nodes[index+1].Hash)
-			} else {
-				nodes = append(nodes, &st.Nodes[index-1].Hash)
-			}
+			siblingHash := getLeafSiblingHash(st.Nodes, index)
+			nodes = append(nodes, siblingHash)
 		} else {
-			treePos := treeIndexPos + treeIndex
-			if treePos%2 == 0 {
-				if totalLength > treePos+1 && !(*merkleTree)[treePos+1].Equal(chainhash.Hash{}) {
-					treePos++
-				}
-			} else {
-				if !(*merkleTree)[treePos-1].Equal(chainhash.Hash{}) {
-					treePos--
-				}
-			}
-
+			treePos := calculateTreePosition(merkleTree, treeIndexPos, treeIndex, totalLength)
 			nodes = append(nodes, &(*merkleTree)[treePos])
 			treeIndexPos += int(math.Pow(2, i))
 		}
@@ -537,6 +524,32 @@ func (st *Subtree) GetMerkleProof(index int) ([]*chainhash.Hash, error) {
 	}
 
 	return nodes, nil
+}
+
+// getLeafSiblingHash returns the hash of the sibling node at the leaf level
+func getLeafSiblingHash(nodes []Node, index int) *chainhash.Hash {
+	if index%2 == 0 {
+		return &nodes[index+1].Hash
+	}
+
+	return &nodes[index-1].Hash
+}
+
+// calculateTreePosition calculates the tree position for the merkle proof sibling
+func calculateTreePosition(merkleTree *[]chainhash.Hash, treeIndexPos, treeIndex, totalLength int) int {
+	treePos := treeIndexPos + treeIndex
+
+	if treePos%2 == 0 {
+		if totalLength > treePos+1 && !(*merkleTree)[treePos+1].Equal(chainhash.Hash{}) {
+			return treePos + 1
+		}
+	} else {
+		if !(*merkleTree)[treePos-1].Equal(chainhash.Hash{}) {
+			return treePos - 1
+		}
+	}
+
+	return treePos
 }
 
 // Serialize serializes the subtree into a byte slice.
@@ -637,7 +650,7 @@ func (st *Subtree) SerializeNodes() ([]byte, error) {
 func (st *Subtree) Deserialize(b []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("recovered in Deserialize: %s", r)
+			err = fmt.Errorf("recovered in Deserialize: %w: %v", err, r)
 		}
 	}()
 
@@ -650,7 +663,7 @@ func (st *Subtree) Deserialize(b []byte) (err error) {
 func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("recovered in DeserializeFromReader: %s", r)
+			err = fmt.Errorf("recovered in DeserializeFromReader: %w: %v", err, r)
 		}
 	}()
 
@@ -712,7 +725,7 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
 
 	// read leaves
-	st.Nodes = make([]SubtreeNode, numLeaves)
+	st.Nodes = make([]Node, numLeaves)
 
 	bytes48 := make([]byte, 48)
 	for i := uint64(0); i < numLeaves; i++ {
@@ -768,14 +781,14 @@ func ReadBytes(buf *bufio.Reader, p []byte) (n int, err error) {
 		err = io.ErrUnexpectedEOF
 	}
 
-	return
+	return n, err
 }
 
 // DeserializeSubtreeConflictingFromReader deserializes the conflicting nodes from the provided reader.
 func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes []chainhash.Hash, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("recovered in DeserializeFromReader: %s", r)
+			err = fmt.Errorf("recovered in DeserializeSubtreeConflictingFromReader: %w: %v", err, r)
 		}
 	}()
 

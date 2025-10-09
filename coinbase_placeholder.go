@@ -1,3 +1,5 @@
+// Package subtree provides utilities for working with Bitcoin SV merkle tree subtrees,
+// including coinbase placeholder handling and subtree data structures.
 package subtree
 
 import (
@@ -14,9 +16,12 @@ var (
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 	}
+	// CoinbasePlaceholderHashValue is the hash representation of the coinbase placeholder
 	CoinbasePlaceholderHashValue = chainhash.Hash(CoinbasePlaceholder)
-	CoinbasePlaceholderHash      = &CoinbasePlaceholderHashValue
+	// CoinbasePlaceholderHash is a pointer to the coinbase placeholder hash value
+	CoinbasePlaceholderHash = &CoinbasePlaceholderHashValue
 
+	// FrozenBytes represents the frozen transaction bytes used for placeholder transactions
 	FrozenBytes = [36]byte{
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -24,8 +29,10 @@ var (
 		0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 		0xFF, 0xFF, 0xFF, 0xFF,
 	}
+	// FrozenBytesTxBytes represents the transaction bytes portion of FrozenBytes
 	FrozenBytesTxBytes = FrozenBytes[0:32]
-	FrozenBytesTxHash  = chainhash.Hash(FrozenBytesTxBytes)
+	// FrozenBytesTxHash is the hash of the frozen transaction bytes
+	FrozenBytesTxHash = chainhash.Hash(FrozenBytesTxBytes)
 )
 
 func generateCoinbasePlaceholderTx() *bt.Tx {
