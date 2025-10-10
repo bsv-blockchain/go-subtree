@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const expectedSizeFourMessage = "expected size to be 4, got %d"
-const expectedSizeEightMessage = "expected size to be 8, got %d"
+const (
+	expectedSizeFourMessage  = "expected size to be 4, got %d"
+	expectedSizeEightMessage = "expected size to be 8, got %d"
+)
 
 func TestNewTree(t *testing.T) {
 	t.Run("invalid size", func(t *testing.T) {
