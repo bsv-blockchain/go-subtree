@@ -64,7 +64,7 @@ func TestRootHash(t *testing.T) {
 	})
 }
 
-func Test_RootHashWithReplaceRootNode(t *testing.T) {
+func TestRootHashWithReplaceRootNode(t *testing.T) {
 	t.Run("empty tree", func(t *testing.T) {
 		st, err := NewTree(2)
 		require.NoError(t, err)
@@ -299,7 +299,7 @@ func TestTwoTransactions(t *testing.T) {
 	assert.Equal(t, "7a059188283323a2ef0e02dd9f8ba1ac550f94646290d0a52a586e5426c956c5", rootHash.String())
 }
 
-func TestSubtree_GetMerkleProof(t *testing.T) {
+func TestSubtreeGetMerkleProof(t *testing.T) {
 	st, err := NewTree(3)
 	require.NoError(t, err)
 
@@ -343,7 +343,7 @@ func TestSubtree_GetMerkleProof(t *testing.T) {
 	assert.Empty(t, proof)
 }
 
-func Test_Serialize(t *testing.T) {
+func TestSubtreeSerialize(t *testing.T) {
 	t.Run("Serialize", func(t *testing.T) {
 		st, err := NewTree(2)
 		require.NoError(t, err)
@@ -531,7 +531,7 @@ func Test_Serialize(t *testing.T) {
 	})
 }
 
-func Test_Duplicate(t *testing.T) {
+func TestDuplicate(t *testing.T) {
 	t.Run("Duplicate", func(t *testing.T) {
 		st, err := NewTree(2)
 		require.NoError(t, err)
@@ -587,7 +587,7 @@ func Test_Duplicate(t *testing.T) {
 	})
 }
 
-func TestSubtree_NodeIndex(t *testing.T) {
+func TestSubtreeNodeIndex(t *testing.T) {
 	tx1 := tx.Clone()
 	tx1.Version = 1
 	hash1 := *tx1.TxIDChainHash()
@@ -674,7 +674,7 @@ func getSubtreeBytes(t *testing.T) (*Subtree, []byte) {
 	return st, serializedBytes
 }
 
-func Test_BuildMerkleTreeStoreFromBytes(t *testing.T) {
+func TestBuildMerkleTreeStoreFromBytes(t *testing.T) {
 	t.Run("complete tree", func(t *testing.T) {
 		hashes := make([]*chainhash.Hash, 8)
 		hashes[0], _ = chainhash.NewHashFromStr("97af9ad3583e2f83fc1e44e475e3a3ee31ec032449cc88b491479ef7d187c115")
@@ -944,7 +944,7 @@ func TestAddNode(t *testing.T) {
 	})
 }
 
-func TestSubtree_ConflictingNodes(t *testing.T) {
+func TestSubtreeConflictingNodes(t *testing.T) {
 	tx1 := tx.Clone()
 	tx1.Version = 1
 	hash1 := *tx1.TxIDChainHash()
@@ -982,7 +982,7 @@ func TestSubtree_ConflictingNodes(t *testing.T) {
 	assert.Len(t, newSt.ConflictingNodes, 1)
 }
 
-func BenchmarkSubtree_Deserialize(b *testing.B) {
+func BenchmarkSubtreeDeserialize(b *testing.B) {
 	// populate subtree for test
 	subtree, _ := NewTreeByLeafCount(1024 * 1024)
 
@@ -1001,7 +1001,7 @@ func BenchmarkSubtree_Deserialize(b *testing.B) {
 	}
 }
 
-func BenchmarkSubtree_DeserializeNodesFromReader(b *testing.B) {
+func BenchmarkSubtreeDeserializeNodesFromReader(b *testing.B) {
 	// populate subtree for test
 	subtree, _ := NewTreeByLeafCount(1024 * 1024)
 
@@ -1024,7 +1024,7 @@ func BenchmarkSubtree_DeserializeNodesFromReader(b *testing.B) {
 	}
 }
 
-func BenchmarkSubtree_DeserializeFromReader(b *testing.B) {
+func BenchmarkSubtreeDeserializeFromReader(b *testing.B) {
 	// populate subtree for test
 	subtree, _ := NewTreeByLeafCount(1024 * 1024)
 
@@ -1048,7 +1048,7 @@ func BenchmarkSubtree_DeserializeFromReader(b *testing.B) {
 	}
 }
 
-func Benchmark_NodeIndex(b *testing.B) {
+func BenchmarkNodeIndex(b *testing.B) {
 	// populate subtree for test
 	subtree, _ := NewTreeByLeafCount(1024 * 1024)
 

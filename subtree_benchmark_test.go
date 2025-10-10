@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func BenchmarkSubtree_AddNode(b *testing.B) {
+func BenchmarkSubtreeAddNode(b *testing.B) {
 	st, err := subtree.NewIncompleteTreeByLeafCount(b.N)
 	require.NoError(b, err)
 
@@ -33,7 +33,7 @@ func BenchmarkSubtree_AddNode(b *testing.B) {
 	}
 }
 
-func BenchmarkSubtree_Serialize(b *testing.B) {
+func BenchmarkSubtreeSerialize(b *testing.B) {
 	st, err := subtree.NewIncompleteTreeByLeafCount(b.N)
 	require.NoError(b, err)
 
@@ -52,7 +52,7 @@ func BenchmarkSubtree_Serialize(b *testing.B) {
 	assert.GreaterOrEqual(b, len(ser), 48*b.N)
 }
 
-func BenchmarkSubtree_SerializeNodes(b *testing.B) {
+func BenchmarkSubtreeSerializeNodes(b *testing.B) {
 	st, err := subtree.NewIncompleteTreeByLeafCount(b.N)
 	require.NoError(b, err)
 
