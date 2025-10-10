@@ -67,7 +67,7 @@ func TestGetMerkleProofForCoinbase(t *testing.T) {
 	})
 }
 
-func TestBuildMerkleTreeStoreFromBytes(t *testing.T) {
+func TestBuildMerkleTreeStoreFromBytesExtended(t *testing.T) {
 	t.Run("empty nodes", func(t *testing.T) {
 		merkles, err := BuildMerkleTreeStoreFromBytes([]Node{})
 		require.NoError(t, err)

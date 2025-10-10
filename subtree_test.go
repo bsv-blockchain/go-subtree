@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	expectedSizeFourMessage  = "expected size to be 4, got %d"
+	expectedSizeEightMessage = "expected size to be 8, got %d"
+)
+
 func TestNewTree(t *testing.T) {
 	t.Run("invalid size", func(t *testing.T) {
 		_, err := NewTreeByLeafCount(123)
@@ -48,7 +53,7 @@ func TestRootHash(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("97af9ad3583e2f83fc1e44e475e3a3ee31ec032449cc88b491479ef7d187c115")
@@ -65,7 +70,7 @@ func TestRootHash(t *testing.T) {
 	})
 }
 
-func Test_RootHashWithReplaceRootNode(t *testing.T) {
+func TestRootHashWithReplaceRootNode(t *testing.T) {
 	t.Run("empty tree", func(t *testing.T) {
 		st, err := NewTree(2)
 		require.NoError(t, err)
@@ -94,7 +99,7 @@ func Test_RootHashWithReplaceRootNode(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		_ = st.AddCoinbaseNode()
@@ -115,7 +120,7 @@ func Test_RootHashWithReplaceRootNode(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("97af9ad3583e2f83fc1e44e475e3a3ee31ec032449cc88b491479ef7d187c115")
@@ -142,7 +147,7 @@ func TestGetMap(t *testing.T) {
 	require.NoError(t, err)
 
 	if st.Size() != 4 {
-		t.Errorf("expected size to be 4, got %d", st.Size())
+		t.Errorf(expectedSizeFourMessage, st.Size())
 	}
 
 	hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -175,7 +180,7 @@ func TestHasNode(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -190,7 +195,7 @@ func TestHasNode(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -205,7 +210,7 @@ func TestGetNode(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -222,7 +227,7 @@ func TestGetNode(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -267,7 +272,7 @@ func TestRootHashSimon(t *testing.T) {
 	require.NoError(t, err)
 
 	if st.Size() != 4 {
-		t.Errorf("expected size to be 4, got %d", st.Size())
+		t.Errorf(expectedSizeFourMessage, st.Size())
 	}
 
 	hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -288,7 +293,7 @@ func TestTwoTransactions(t *testing.T) {
 	require.NoError(t, err)
 
 	if st.Size() != 2 {
-		t.Errorf("expected size to be 4, got %d", st.Size())
+		t.Errorf(expectedSizeFourMessage, st.Size())
 	}
 
 	hash1, _ := chainhash.NewHashFromStr("de2c2e8628ab837ceff3de0217083d9d5feb71f758a5d083ada0b33a36e1b30e")
@@ -300,12 +305,12 @@ func TestTwoTransactions(t *testing.T) {
 	assert.Equal(t, "7a059188283323a2ef0e02dd9f8ba1ac550f94646290d0a52a586e5426c956c5", rootHash.String())
 }
 
-func TestSubtree_GetMerkleProof(t *testing.T) {
+func TestSubtreeGetMerkleProof(t *testing.T) {
 	st, err := NewTree(3)
 	require.NoError(t, err)
 
 	if st.Size() != 8 {
-		t.Errorf("expected size to be 4, got %d", st.Size())
+		t.Errorf(expectedSizeEightMessage, st.Size())
 	}
 
 	txIDs := []string{
@@ -344,13 +349,13 @@ func TestSubtree_GetMerkleProof(t *testing.T) {
 	assert.Empty(t, proof)
 }
 
-func Test_Serialize(t *testing.T) {
+func TestSubtreeSerialize(t *testing.T) {
 	t.Run("Serialize", func(t *testing.T) {
 		st, err := NewTree(2)
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -387,7 +392,7 @@ func Test_Serialize(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -478,7 +483,7 @@ func Test_Serialize(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -532,13 +537,13 @@ func Test_Serialize(t *testing.T) {
 	})
 }
 
-func Test_Duplicate(t *testing.T) {
+func TestDuplicate(t *testing.T) {
 	t.Run("Duplicate", func(t *testing.T) {
 		st, err := NewTree(2)
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -570,7 +575,7 @@ func Test_Duplicate(t *testing.T) {
 		require.NoError(t, err)
 
 		if st.Size() != 4 {
-			t.Errorf("expected size to be 4, got %d", st.Size())
+			t.Errorf(expectedSizeFourMessage, st.Size())
 		}
 
 		hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -588,7 +593,7 @@ func Test_Duplicate(t *testing.T) {
 	})
 }
 
-func TestSubtree_NodeIndex(t *testing.T) {
+func TestSubtreeNodeIndex(t *testing.T) {
 	tx1 := tx.Clone()
 	tx1.Version = 1
 	hash1 := *tx1.TxIDChainHash()
@@ -657,7 +662,7 @@ func getSubtreeBytes(t *testing.T) (*Subtree, []byte) {
 	require.NoError(t, err)
 
 	if st.Size() != 4 {
-		t.Errorf("expected size to be 4, got %d", st.Size())
+		t.Errorf(expectedSizeFourMessage, st.Size())
 	}
 
 	hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
@@ -675,7 +680,7 @@ func getSubtreeBytes(t *testing.T) (*Subtree, []byte) {
 	return st, serializedBytes
 }
 
-func Test_BuildMerkleTreeStoreFromBytes(t *testing.T) {
+func TestBuildMerkleTreeStoreFromBytes(t *testing.T) {
 	t.Run("complete tree", func(t *testing.T) {
 		hashes := make([]*chainhash.Hash, 8)
 		hashes[0], _ = chainhash.NewHashFromStr("97af9ad3583e2f83fc1e44e475e3a3ee31ec032449cc88b491479ef7d187c115")
