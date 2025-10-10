@@ -12,6 +12,7 @@ import (
 )
 
 const expectedSizeFourMessage = "expected size to be 4, got %d"
+const expectedSizeEightMessage = "expected size to be 8, got %d"
 
 func TestNewTree(t *testing.T) {
 	t.Run("invalid size", func(t *testing.T) {
@@ -307,7 +308,7 @@ func TestSubtreeGetMerkleProof(t *testing.T) {
 	require.NoError(t, err)
 
 	if st.Size() != 8 {
-		t.Errorf(expectedSizeFourMessage, st.Size())
+		t.Errorf(expectedSizeEightMessage, st.Size())
 	}
 
 	txIDs := []string{
