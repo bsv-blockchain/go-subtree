@@ -12,7 +12,7 @@
 - **Performance**: Zero runtime dependencies, allocation-free operations, parallel tree computation
 
 ### Target Use Cases
-Bitcoin block construction, mempool management, SPV proof generation, teranode transaction organization.
+Bitcoin block construction, SPV proof generation, teranode transaction organization.
 
 ## 🤖 Welcome, Claude
 

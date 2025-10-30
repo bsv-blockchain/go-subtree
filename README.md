@@ -1,6 +1,22 @@
 # 🌿 go-subtree
 > A Go library for efficiently managing Bitcoin SV Subtree transaction structures
 
+## 📦 Overview
+
+**go-subtree** is a high-performance Go library for managing Bitcoin SV (BSV) merkle tree subtree structures. It provides efficient tools for organizing transactions hierarchically, essential for block assembly, transaction validation, and merkle proof generation in BSV blockchain infrastructure.
+
+### Core Capabilities
+- **Subtree Management**: Create and manipulate merkle trees with dynamic node addition/removal
+- **Merkle Operations**: Generate merkle proofs, calculate roots, handle incomplete trees
+- **Serialization**: Binary format support for storage and transmission with streaming deserialization
+- **Transaction Tracking**: Link full transaction data to tree nodes, track inpoints and conflicts
+- **Performance**: Zero runtime dependencies, allocation-free operations, parallel tree computation
+
+### Target Use Cases
+Bitcoin block construction, SPV proof generation, teranode transaction organization.
+
+<br/>
+
 <table>
   <thead>
     <tr>
@@ -75,15 +91,23 @@
 <br/>
 
 ## 🗂️ Table of Contents
-* [Installation](#-installation)
-* [Documentation](#-documentation)
-* [Examples & Tests](#-examples--tests)
-* [Benchmarks](#-benchmarks)
-* [Code Standards](#-code-standards)
-* [AI Compliance](#-ai-compliance)
-* [Maintainers](#-maintainers)
-* [Contributing](#-contributing)
-* [License](#-license)
+- [🌿 go-subtree](#-go-subtree)
+	- [📦 Overview](#-overview)
+		- [Core Capabilities](#core-capabilities)
+		- [Target Use Cases](#target-use-cases)
+	- [🗂️ Table of Contents](#️-table-of-contents)
+	- [📦 Installation](#-installation)
+	- [📚 Documentation](#-documentation)
+		- [🎛️ The Workflow Control Center](#️-the-workflow-control-center)
+	- [🧪 Examples \& Tests](#-examples--tests)
+	- [⚡ Benchmarks](#-benchmarks)
+		- [Benchmark Results](#benchmark-results)
+	- [🛠️ Code Standards](#️-code-standards)
+	- [🤖 AI Compliance](#-ai-compliance)
+	- [👥 Maintainers](#-maintainers)
+	- [🤝 Contributing](#-contributing)
+		- [How can I help?](#how-can-i-help)
+	- [📝 License](#-license)
 
 <br/>
 
