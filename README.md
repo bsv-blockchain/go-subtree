@@ -88,7 +88,7 @@
 
 <br/>
 
-## 📦 Overview
+## 📖 Overview
 
 **go-subtree** is a high-performance Go library for managing Bitcoin SV (BSV) merkle tree subtree structures. It provides efficient tools for organizing transactions hierarchically, essential for block assembly, transaction validation, and merkle proof generation in BSV blockchain infrastructure.
 
