@@ -127,7 +127,7 @@ func NewSubtreeFromReader(reader io.Reader) (*Subtree, error) {
 
 // DeserializeNodesFromReader deserializes the nodes from the provided reader.
 func DeserializeNodesFromReader(reader io.Reader) (subtreeBytes []byte, err error) {
-	buf := bufio.NewReaderSize(reader, 1024*1024*16) // 16MB buffer
+	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
 
 	// root len(st.rootHash[:]) bytes
 	// first 8 bytes, fees
@@ -667,7 +667,7 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 		}
 	}()
 
-	buf := bufio.NewReaderSize(reader, 1024*1024*16) // 16MB buffer
+	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
 
 	var (
 		n      int
@@ -792,7 +792,7 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 		}
 	}()
 
-	buf := bufio.NewReaderSize(reader, 1024*1024*16) // 16MB buffer
+	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
 
 	// skip root hash 32 bytes
 	// skip fees, 8 bytes
