@@ -135,7 +135,7 @@ func DeserializeNodesFromReader(reader io.Reader) (subtreeBytes []byte, err erro
 	// third 8 bytes, number of leaves
 	// total read at once = len(st.rootHash[:]) + 8 + 8 + 8
 	byteBuffer := make([]byte, chainhash.HashSize+24)
-	if _, err = ReadBytes(buf, byteBuffer); err != nil {
+	if _, err = io.ReadFull(buf, byteBuffer); err != nil {
 		return nil, fmt.Errorf("unable to read subtree root information: %w", err)
 	}
 
@@ -144,7 +144,7 @@ func DeserializeNodesFromReader(reader io.Reader) (subtreeBytes []byte, err erro
 
 	byteBuffer = byteBuffer[8:] // reduce read byteBuffer size by 8
 	for i := uint64(0); i < numLeaves; i++ {
-		if _, err = ReadBytes(buf, byteBuffer); err != nil {
+		if _, err = io.ReadFull(buf, byteBuffer); err != nil {
 			return nil, fmt.Errorf("unable to read subtree node information: %w", err)
 		}
 
@@ -669,29 +669,23 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 
 	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
 
-	var (
-		n      int
-		bytes8 = make([]byte, 8)
-	)
+	bytes8 := make([]byte, 8)
 
 	// read root hash
 	st.rootHash = new(chainhash.Hash)
-	if n, err = buf.Read(st.rootHash[:]); err != nil || n != chainhash.HashSize {
-		// if _, err = io.ReadFull(buf, st.rootHash[:]); err != nil {
+	if _, err = io.ReadFull(buf, st.rootHash[:]); err != nil {
 		return fmt.Errorf("unable to read root hash: %w", err)
 	}
 
 	// read fees
-	if n, err = buf.Read(bytes8); err != nil || n != 8 {
-		// if _, err = io.ReadFull(buf, bytes8); err != nil {
+	if _, err = io.ReadFull(buf, bytes8); err != nil {
 		return fmt.Errorf("unable to read fees: %w", err)
 	}
 
 	st.Fees = binary.LittleEndian.Uint64(bytes8)
 
 	// read sizeInBytes
-	if n, err = buf.Read(bytes8); err != nil || n != 8 {
-		// if _, err = io.ReadFull(buf, bytes8); err != nil {
+	if _, err = io.ReadFull(buf, bytes8); err != nil {
 		return fmt.Errorf("unable to read sizeInBytes: %w", err)
 	}
 
@@ -713,8 +707,7 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 	bytes8 := make([]byte, 8)
 
 	// read number of leaves
-	if n, err := buf.Read(bytes8); err != nil || n != 8 {
-		// if _, err = io.ReadFull(buf, bytes8); err != nil {
+	if _, err := io.ReadFull(buf, bytes8); err != nil {
 		return fmt.Errorf("unable to read number of leaves: %w", err)
 	}
 
@@ -730,8 +723,7 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 	bytes48 := make([]byte, 48)
 	for i := uint64(0); i < numLeaves; i++ {
 		// read all the node data in 1 go
-		if n, err := ReadBytes(buf, bytes48); err != nil || n != 48 {
-			// if _, err = io.ReadFull(buf, bytes48); err != nil {
+		if _, err := io.ReadFull(buf, bytes48); err != nil {
 			return fmt.Errorf("unable to read node: %w", err)
 		}
 
@@ -748,8 +740,7 @@ func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 	bytes8 := make([]byte, 8)
 
 	// read the number of conflicting nodes
-	if n, err := buf.Read(bytes8); err != nil || n != 8 {
-		// if _, err = io.ReadFull(buf, bytes8); err != nil {
+	if _, err := io.ReadFull(buf, bytes8); err != nil {
 		return fmt.Errorf("unable to read number of conflicting nodes: %w", err)
 	}
 
@@ -759,29 +750,12 @@ func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 	st.ConflictingNodes = make([]chainhash.Hash, numConflictingLeaves)
 
 	for i := uint64(0); i < numConflictingLeaves; i++ {
-		if n, err := buf.Read(st.ConflictingNodes[i][:]); err != nil || n != 32 {
+		if _, err := io.ReadFull(buf, st.ConflictingNodes[i][:]); err != nil {
 			return fmt.Errorf("unable to read conflicting node %d: %w", i, err)
 		}
 	}
 
 	return nil
-}
-
-// ReadBytes reads bytes from the buffered reader into the provided byte slice.
-func ReadBytes(buf *bufio.Reader, p []byte) (n int, err error) {
-	minRead := len(p)
-	for n < minRead && err == nil {
-		p[n], err = buf.ReadByte()
-		n++
-	}
-
-	if n >= minRead {
-		err = nil
-	} else if n > 0 && err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-
-	return n, err
 }
 
 // DeserializeSubtreeConflictingFromReader deserializes the conflicting nodes from the provided reader.
