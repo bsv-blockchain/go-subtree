@@ -1220,9 +1220,9 @@ func TestGetMerkleProofOddLeaves(t *testing.T) {
 		require.NoError(t, err)
 
 		// Add 541 nodes (odd number)
-		for i := 0; i < 541; i++ {
+		for i := uint64(0); i < uint64(541); i++ {
 			hash, _ := chainhash.NewHashFromStr("0000000000000000000000000000000000000000000000000000000000000001")
-			err = tree.AddNode(*hash, uint64(i), uint64(i*100))
+			err = tree.AddNode(*hash, i, i*100)
 			require.NoError(t, err)
 		}
 
@@ -1233,7 +1233,7 @@ func TestGetMerkleProofOddLeaves(t *testing.T) {
 		require.NotNil(t, proof)
 
 		// Should not panic and should return a valid proof
-		require.Greater(t, len(proof), 0)
+		require.NotEmptyf(t, proof, "Merkle proof should not be empty")
 
 		// The first hash in the proof should be the duplicate of the last node
 		// since 540 is even and has no sibling at index 541
