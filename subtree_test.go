@@ -1147,3 +1147,97 @@ func Benchmark_NodeIndex(b *testing.B) {
 		require.GreaterOrEqual(b, index, 0)
 	}
 }
+
+func TestGetMerkleProofOddLeaves(t *testing.T) {
+	t.Run("odd number of leaves in power-of-two tree", func(t *testing.T) {
+		// Create a subtree with capacity for 4 nodes but only add 3 (odd number)
+		tree, err := NewTree(2) // height 2 = 2^2 = 4 leaves
+		require.NoError(t, err)
+
+		// Add 3 nodes (odd number)
+		hash1, _ := chainhash.NewHashFromStr("1111111111111111111111111111111111111111111111111111111111111111")
+		hash2, _ := chainhash.NewHashFromStr("2222222222222222222222222222222222222222222222222222222222222222")
+		hash3, _ := chainhash.NewHashFromStr("3333333333333333333333333333333333333333333333333333333333333333")
+
+		err = tree.AddNode(*hash1, 100, 250)
+		require.NoError(t, err)
+		err = tree.AddNode(*hash2, 200, 300)
+		require.NoError(t, err)
+		err = tree.AddNode(*hash3, 150, 275)
+		require.NoError(t, err)
+
+		// Test GetMerkleProof for the last node (index 2)
+		// This should duplicate the last node as its sibling
+		proof, err := tree.GetMerkleProof(2)
+		require.NoError(t, err)
+		require.NotNil(t, proof)
+
+		// The first hash in the proof should be the duplicate of the last node
+		require.Equal(t, hash3.String(), proof[0].String())
+	})
+
+	t.Run("even number of leaves", func(t *testing.T) {
+		// Create a subtree with 4 nodes (even number)
+		tree, err := NewTreeByLeafCount(4)
+		require.NoError(t, err)
+
+		// Add 4 nodes
+		hash1, _ := chainhash.NewHashFromStr("1111111111111111111111111111111111111111111111111111111111111111")
+		hash2, _ := chainhash.NewHashFromStr("2222222222222222222222222222222222222222222222222222222222222222")
+		hash3, _ := chainhash.NewHashFromStr("3333333333333333333333333333333333333333333333333333333333333333")
+		hash4, _ := chainhash.NewHashFromStr("4444444444444444444444444444444444444444444444444444444444444444")
+
+		err = tree.AddNode(*hash1, 100, 250)
+		require.NoError(t, err)
+		err = tree.AddNode(*hash2, 200, 300)
+		require.NoError(t, err)
+		err = tree.AddNode(*hash3, 150, 275)
+		require.NoError(t, err)
+		err = tree.AddNode(*hash4, 175, 325)
+		require.NoError(t, err)
+
+		// Test GetMerkleProof for the second-to-last node (index 2)
+		proof, err := tree.GetMerkleProof(2)
+		require.NoError(t, err)
+		require.NotNil(t, proof)
+
+		// The first hash in the proof should be hash4 (its sibling)
+		require.Equal(t, hash4.String(), proof[0].String())
+
+		// Test GetMerkleProof for the last node (index 3)
+		proof, err = tree.GetMerkleProof(3)
+		require.NoError(t, err)
+		require.NotNil(t, proof)
+
+		// The first hash in the proof should be hash3 (its sibling)
+		require.Equal(t, hash3.String(), proof[0].String())
+	})
+
+	t.Run("large odd number of leaves", func(t *testing.T) {
+		// Test with 541 nodes (the example that was failing)
+		// Tree needs power of 2 capacity: 2^10 = 1024 > 541
+		tree, err := NewTree(10)
+		require.NoError(t, err)
+
+		// Add 541 nodes (odd number)
+		for i := 0; i < 541; i++ {
+			hash, _ := chainhash.NewHashFromStr("0000000000000000000000000000000000000000000000000000000000000001")
+			err = tree.AddNode(*hash, uint64(i), uint64(i*100))
+			require.NoError(t, err)
+		}
+
+		// Test GetMerkleProof for the last node (index 540)
+		// This was the one causing the panic
+		proof, err := tree.GetMerkleProof(540)
+		require.NoError(t, err)
+		require.NotNil(t, proof)
+
+		// Should not panic and should return a valid proof
+		require.Greater(t, len(proof), 0)
+
+		// The first hash in the proof should be the duplicate of the last node
+		// since 540 is even and has no sibling at index 541
+		lastNodeHash := tree.Nodes[540].Hash
+		require.Equal(t, lastNodeHash.String(), proof[0].String())
+	})
+}
