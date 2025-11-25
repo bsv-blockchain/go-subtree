@@ -529,6 +529,12 @@ func (st *Subtree) GetMerkleProof(index int) ([]*chainhash.Hash, error) {
 // getLeafSiblingHash returns the hash of the sibling node at the leaf level
 func getLeafSiblingHash(nodes []Node, index int) *chainhash.Hash {
 	if index%2 == 0 {
+		// For even index, sibling is at index+1
+		// But if index+1 is out of bounds (odd number of leaves),
+		// duplicate the last node (Bitcoin convention)
+		if index+1 >= len(nodes) {
+			return &nodes[index].Hash
+		}
 		return &nodes[index+1].Hash
 	}
 
