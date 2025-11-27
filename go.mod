@@ -7,11 +7,11 @@ require (
 	github.com/bsv-blockchain/go-safe-conversion v1.1.0
 	github.com/bsv-blockchain/go-tx-map v1.2.1
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b
+	golang.org/x/exp v0.0.0-20251125195548-87e1e737ad39
 )
 
 require (
-	github.com/bsv-blockchain/go-sdk v1.2.11 // indirect
+	github.com/bsv-blockchain/go-sdk v1.2.12 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
