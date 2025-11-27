@@ -237,14 +237,24 @@ func (st *Subtree) AddSubtreeNode(node Node) error {
 		return fmt.Errorf("[AddSubtreeNode] %w, tree length is %d", ErrCoinbasePlaceholderMisuse, len(st.Nodes))
 	}
 
-	// AddNode is not concurrency safe, so we can reuse the same byte arrays
-	// binary.LittleEndian.PutUint64(st.feeBytes, fee)
-	// st.feeHashBytes = append(node[:], st.feeBytes[:]...)
-	// if len(st.Nodes) == 0 {
-	//	st.FeeHash = chainhash.HashH(st.feeHashBytes)
-	// } else {
-	//	st.FeeHash = chainhash.HashH(append(st.FeeHash[:], st.feeHashBytes...))
-	// }
+	st.Nodes = append(st.Nodes, node)
+	st.rootHash = nil // reset rootHash
+	st.Fees += node.Fee
+	st.SizeInBytes += node.SizeInBytes
+
+	if st.nodeIndex != nil {
+		// node index map exists, add the node to it
+		st.nodeIndex[node.Hash] = len(st.Nodes) - 1
+	}
+
+	return nil
+}
+
+// AddSubtreeNodeWithoutLock adds a Node to the subtree without locking.
+func (st *Subtree) AddSubtreeNodeWithoutLock(node Node) error {
+	if (len(st.Nodes) + 1) > st.treeSize {
+		return ErrSubtreeFull
+	}
 
 	st.Nodes = append(st.Nodes, node)
 	st.rootHash = nil // reset rootHash
