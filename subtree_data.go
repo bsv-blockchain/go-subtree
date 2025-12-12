@@ -148,6 +148,83 @@ func (s *Data) WriteTransactionsToWriter(w io.Writer, startIdx, endIdx int) erro
 	return nil
 }
 
+// WriteTransactionChunk writes a slice of transactions directly to a writer.
+//
+// This is a simplified streaming function that writes transactions without requiring a SubtreeData
+// structure. It's useful for workflows where transactions are already loaded and just need to be
+// streamed to disk.
+//
+// Parameters:
+//   - w: Writer to stream transactions to
+//   - txs: Slice of transactions to write
+//
+// Returns an error if writing fails.
+func WriteTransactionChunk(w io.Writer, txs []*bt.Tx) error {
+	for _, tx := range txs {
+		if tx == nil {
+			continue // Skip nil transactions
+		}
+
+		txBytes := tx.SerializeBytes()
+		if _, err := w.Write(txBytes); err != nil {
+			return fmt.Errorf("%w: %w", ErrTransactionWrite, err)
+		}
+	}
+
+	return nil
+}
+
+// ReadTransactionChunk reads and validates a chunk of transactions from a reader.
+//
+// This is a simplified streaming function that reads transactions directly into a new slice,
+// validates them against the subtree structure, and returns the populated slice. This is more
+// memory-efficient than ReadTransactionsFromReader for processing workflows where the SubtreeData
+// array is not needed.
+//
+// Parameters:
+//   - r: Reader to read transactions from
+//   - subtree: Subtree structure for hash validation
+//   - startIdx: Starting index in subtree for validation
+//   - count: Number of transactions to read
+//
+// Returns a slice of transactions and any error encountered.
+func ReadTransactionChunk(r io.Reader, subtree *Subtree, startIdx, count int) ([]*bt.Tx, error) {
+	if subtree == nil || len(subtree.Nodes) == 0 {
+		return nil, ErrSubtreeNodesEmpty
+	}
+
+	txs := make([]*bt.Tx, 0, count)
+
+	for i := 0; i < count; i++ {
+		idx := startIdx + i
+		if idx >= len(subtree.Nodes) {
+			break // Reached end of subtree
+		}
+
+		// Skip coinbase placeholder
+		if idx == 0 && subtree.Nodes[0].Hash.Equal(CoinbasePlaceholderHashValue) {
+			continue
+		}
+
+		tx := &bt.Tx{}
+		if _, err := tx.ReadFrom(r); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return txs, fmt.Errorf("%w at index %d: %w", ErrTransactionRead, idx, err)
+		}
+
+		// Validate tx hash matches expected
+		if !subtree.Nodes[idx].Hash.Equal(*tx.TxIDChainHash()) {
+			return txs, ErrTxHashMismatch
+		}
+
+		txs = append(txs, tx)
+	}
+
+	return txs, nil
+}
+
 // ReadTransactionsFromReader reads a range of transactions from a reader.
 //
 // This enables memory-efficient deserialization by reading only a chunk of transactions
