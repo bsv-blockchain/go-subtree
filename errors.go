@@ -65,4 +65,13 @@ var (
 
 	// ErrReadError is a generic read error for testing
 	ErrReadError = errors.New("read error")
+
+	// ErrTransactionNil is returned when a transaction is nil during serialization
+	ErrTransactionNil = errors.New("transaction is nil, cannot serialize")
+
+	// ErrTransactionWrite is returned when writing a transaction fails
+	ErrTransactionWrite = errors.New("error writing transaction")
+
+	// ErrTransactionRead is returned when reading a transaction fails
+	ErrTransactionRead = errors.New("error reading transaction")
 )
