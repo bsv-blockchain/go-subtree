@@ -111,6 +111,86 @@ func (s *Data) Serialize() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// WriteTransactionsToWriter writes a range of transactions directly to a writer.
+//
+// This enables memory-efficient serialization by streaming transactions to disk as they are loaded,
+// without requiring all transactions to be in memory simultaneously. Transactions in the specified
+// range are written sequentially, skipping any nil entries.
+//
+// Parameters:
+//   - w: Writer to stream transactions to
+//   - startIdx: Starting index (inclusive) of transactions to write
+//   - endIdx: Ending index (exclusive) of transactions to write
+//
+// Returns an error if writing fails or if required transactions are missing (nil).
+func (s *Data) WriteTransactionsToWriter(w io.Writer, startIdx, endIdx int) error {
+	if s.Subtree == nil {
+		return ErrCannotSerializeSubtreeNotSet
+	}
+
+	for i := startIdx; i < endIdx; i++ {
+		// Skip coinbase placeholder if it's the first transaction
+		if i == 0 && s.Subtree.Nodes[0].Hash.Equal(*CoinbasePlaceholderHash) {
+			continue
+		}
+
+		if s.Txs[i] == nil {
+			return fmt.Errorf("transaction at index %d is nil, cannot serialize", i)
+		}
+
+		// Serialize and stream transaction bytes to writer
+		txBytes := s.Txs[i].SerializeBytes()
+		if _, err := w.Write(txBytes); err != nil {
+			return fmt.Errorf("error writing transaction at index %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// ReadTransactionsFromReader reads a range of transactions from a reader.
+//
+// This enables memory-efficient deserialization by reading only a chunk of transactions
+// from disk at a time, rather than loading all transactions into memory.
+//
+// Parameters:
+//   - r: Reader to read transactions from
+//   - startIdx: Starting index (inclusive) where transactions should be stored
+//   - endIdx: Ending index (exclusive) where transactions should be stored
+//
+// Returns the number of transactions read and any error encountered.
+func (s *Data) ReadTransactionsFromReader(r io.Reader, startIdx, endIdx int) (int, error) {
+	if s.Subtree == nil || len(s.Subtree.Nodes) == 0 {
+		return 0, ErrSubtreeNodesEmpty
+	}
+
+	txsRead := 0
+	for i := startIdx; i < endIdx; i++ {
+		// Skip coinbase placeholder
+		if i == 0 && s.Subtree.Nodes[0].Hash.Equal(CoinbasePlaceholderHashValue) {
+			continue
+		}
+
+		tx := &bt.Tx{}
+		if _, err := tx.ReadFrom(r); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return txsRead, fmt.Errorf("error reading transaction at index %d: %w", i, err)
+		}
+
+		// Validate tx hash matches expected
+		if !s.Subtree.Nodes[i].Hash.Equal(*tx.TxIDChainHash()) {
+			return txsRead, ErrTxHashMismatch
+		}
+
+		s.Txs[i] = tx
+		txsRead++
+	}
+
+	return txsRead, nil
+}
+
 // serializeFromReader reads transactions from the provided reader and populates the Txs field.
 func (s *Data) serializeFromReader(buf io.Reader) error {
 	var (
