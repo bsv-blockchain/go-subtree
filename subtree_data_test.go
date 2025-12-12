@@ -397,7 +397,7 @@ func setupTestSubtreeData(t *testing.T) (*Subtree, *Data, []*bt.Tx) {
 	txs := make([]*bt.Tx, 4)
 	for i := range txs {
 		txs[i] = tx.Clone()
-		txs[i].Version = uint32(i + 1)
+		txs[i].Version = uint32(i + 1) //nolint:gosec // G115: test data, safe conversion
 	}
 
 	subtree, err := NewTree(2)
@@ -447,8 +447,7 @@ func TestWriteTransactionsToWriter(t *testing.T) {
 
 		buf := &bytes.Buffer{}
 		err := subtreeData.WriteTransactionsToWriter(buf, 0, 2)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "transaction at index 1 is nil")
+		require.ErrorIs(t, err, ErrTransactionNil)
 	})
 }
 
@@ -495,7 +494,7 @@ func TestReadTransactionsFromReader(t *testing.T) {
 		// Try to read more transactions than available
 		targetData := NewSubtreeData(subtree)
 		numRead, err := targetData.ReadTransactionsFromReader(bytes.NewReader(serialized), 0, 10)
-		require.NoError(t, err) // EOF not an error
+		require.NoError(t, err)     // EOF not an error
 		assert.Equal(t, 4, numRead) // Only 4 available
 	})
 }

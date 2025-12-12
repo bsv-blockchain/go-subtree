@@ -135,13 +135,13 @@ func (s *Data) WriteTransactionsToWriter(w io.Writer, startIdx, endIdx int) erro
 		}
 
 		if s.Txs[i] == nil {
-			return fmt.Errorf("transaction at index %d is nil, cannot serialize", i)
+			return ErrTransactionNil
 		}
 
 		// Serialize and stream transaction bytes to writer
 		txBytes := s.Txs[i].SerializeBytes()
 		if _, err := w.Write(txBytes); err != nil {
-			return fmt.Errorf("error writing transaction at index %d: %w", i, err)
+			return fmt.Errorf("%w at index %d: %w", ErrTransactionWrite, i, err)
 		}
 	}
 
@@ -176,7 +176,7 @@ func (s *Data) ReadTransactionsFromReader(r io.Reader, startIdx, endIdx int) (in
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return txsRead, fmt.Errorf("error reading transaction at index %d: %w", i, err)
+			return txsRead, fmt.Errorf("%w at index %d: %w", ErrTransactionRead, i, err)
 		}
 
 		// Validate tx hash matches expected
