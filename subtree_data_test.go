@@ -391,3 +391,191 @@ type mockReader struct {
 func (r *mockReader) Read(_ []byte) (n int, err error) {
 	return 0, r.err
 }
+
+func TestWriteTransactionsToWriter(t *testing.T) {
+	tx1 := tx.Clone()
+	tx1.Version = 1
+
+	tx2 := tx.Clone()
+	tx2.Version = 2
+
+	tx3 := tx.Clone()
+	tx3.Version = 3
+
+	tx4 := tx.Clone()
+	tx4.Version = 4
+
+	t.Run("write full range of transactions", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx3.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx4.TxIDChainHash(), 111, 0)
+
+		subtreeData := NewSubtreeData(subtree)
+		require.NoError(t, subtreeData.AddTx(tx1, 0))
+		require.NoError(t, subtreeData.AddTx(tx2, 1))
+		require.NoError(t, subtreeData.AddTx(tx3, 2))
+		require.NoError(t, subtreeData.AddTx(tx4, 3))
+
+		// Write to buffer
+		buf := &bytes.Buffer{}
+		err = subtreeData.WriteTransactionsToWriter(buf, 0, 4)
+		require.NoError(t, err)
+
+		// Verify we can read back
+		newSubtreeData, err := NewSubtreeDataFromBytes(subtree, buf.Bytes())
+		require.NoError(t, err)
+		assert.Equal(t, tx1.Version, newSubtreeData.Txs[0].Version)
+		assert.Equal(t, tx2.Version, newSubtreeData.Txs[1].Version)
+		assert.Equal(t, tx3.Version, newSubtreeData.Txs[2].Version)
+		assert.Equal(t, tx4.Version, newSubtreeData.Txs[3].Version)
+	})
+
+	t.Run("write partial range of transactions", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx3.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx4.TxIDChainHash(), 111, 0)
+
+		subtreeData := NewSubtreeData(subtree)
+		require.NoError(t, subtreeData.AddTx(tx1, 0))
+		require.NoError(t, subtreeData.AddTx(tx2, 1))
+		require.NoError(t, subtreeData.AddTx(tx3, 2))
+		require.NoError(t, subtreeData.AddTx(tx4, 3))
+
+		// Write only middle transactions (1-3)
+		buf := &bytes.Buffer{}
+		err = subtreeData.WriteTransactionsToWriter(buf, 1, 3)
+		require.NoError(t, err)
+
+		// Verify size matches tx2 + tx3
+		expectedSize := len(tx2.SerializeBytes()) + len(tx3.SerializeBytes())
+		assert.Equal(t, expectedSize, buf.Len())
+	})
+
+	t.Run("error on nil transaction", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+
+		subtreeData := NewSubtreeData(subtree)
+		require.NoError(t, subtreeData.AddTx(tx1, 0))
+		// Don't add tx2 - leave it nil
+
+		buf := &bytes.Buffer{}
+		err = subtreeData.WriteTransactionsToWriter(buf, 0, 2)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "transaction at index 1 is nil")
+	})
+}
+
+func TestReadTransactionsFromReader(t *testing.T) {
+	tx1 := tx.Clone()
+	tx1.Version = 1
+
+	tx2 := tx.Clone()
+	tx2.Version = 2
+
+	tx3 := tx.Clone()
+	tx3.Version = 3
+
+	tx4 := tx.Clone()
+	tx4.Version = 4
+
+	t.Run("read full range of transactions", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx3.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx4.TxIDChainHash(), 111, 0)
+
+		// Create source subtreeData
+		sourceData := NewSubtreeData(subtree)
+		require.NoError(t, sourceData.AddTx(tx1, 0))
+		require.NoError(t, sourceData.AddTx(tx2, 1))
+		require.NoError(t, sourceData.AddTx(tx3, 2))
+		require.NoError(t, sourceData.AddTx(tx4, 3))
+
+		// Serialize to bytes
+		serialized, err := sourceData.Serialize()
+		require.NoError(t, err)
+
+		// Read back using chunked reader
+		reader := bytes.NewReader(serialized)
+		targetData := NewSubtreeData(subtree)
+
+		numRead, err := targetData.ReadTransactionsFromReader(reader, 0, 4)
+		require.NoError(t, err)
+		assert.Equal(t, 4, numRead)
+
+		assert.Equal(t, tx1.Version, targetData.Txs[0].Version)
+		assert.Equal(t, tx2.Version, targetData.Txs[1].Version)
+		assert.Equal(t, tx3.Version, targetData.Txs[2].Version)
+		assert.Equal(t, tx4.Version, targetData.Txs[3].Version)
+	})
+
+	t.Run("read partial range of transactions", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx3.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx4.TxIDChainHash(), 111, 0)
+
+		sourceData := NewSubtreeData(subtree)
+		require.NoError(t, sourceData.AddTx(tx1, 0))
+		require.NoError(t, sourceData.AddTx(tx2, 1))
+		require.NoError(t, sourceData.AddTx(tx3, 2))
+		require.NoError(t, sourceData.AddTx(tx4, 3))
+
+		serialized, err := sourceData.Serialize()
+		require.NoError(t, err)
+
+		// Read only first 2 transactions
+		reader := bytes.NewReader(serialized)
+		targetData := NewSubtreeData(subtree)
+
+		numRead, err := targetData.ReadTransactionsFromReader(reader, 0, 2)
+		require.NoError(t, err)
+		assert.Equal(t, 2, numRead)
+
+		assert.Equal(t, tx1.Version, targetData.Txs[0].Version)
+		assert.Equal(t, tx2.Version, targetData.Txs[1].Version)
+		assert.Nil(t, targetData.Txs[2]) // Not read yet
+		assert.Nil(t, targetData.Txs[3]) // Not read yet
+	})
+
+	t.Run("read EOF gracefully", func(t *testing.T) {
+		subtree, err := NewTree(2)
+		require.NoError(t, err)
+
+		_ = subtree.AddNode(*tx1.TxIDChainHash(), 111, 0)
+		_ = subtree.AddNode(*tx2.TxIDChainHash(), 111, 0)
+
+		sourceData := NewSubtreeData(subtree)
+		require.NoError(t, sourceData.AddTx(tx1, 0))
+		require.NoError(t, sourceData.AddTx(tx2, 1))
+
+		serialized, err := sourceData.Serialize()
+		require.NoError(t, err)
+
+		reader := bytes.NewReader(serialized)
+		targetData := NewSubtreeData(subtree)
+
+		// Try to read more transactions than available - should stop at EOF
+		numRead, err := targetData.ReadTransactionsFromReader(reader, 0, 10)
+		require.NoError(t, err) // EOF is not an error
+		assert.Equal(t, 2, numRead) // Only 2 were available
+	})
+}
