@@ -391,3 +391,110 @@ type mockReader struct {
 func (r *mockReader) Read(_ []byte) (n int, err error) {
 	return 0, r.err
 }
+
+// Helper to create test subtree with 4 versioned transactions
+func setupTestSubtreeData(t *testing.T) (*Subtree, *Data, []*bt.Tx) {
+	txs := make([]*bt.Tx, 4)
+	for i := range txs {
+		txs[i] = tx.Clone()
+		txs[i].Version = uint32(i + 1) //nolint:gosec // G115: test data, safe conversion
+	}
+
+	subtree, err := NewTree(2)
+	require.NoError(t, err)
+
+	for _, tx := range txs {
+		_ = subtree.AddNode(*tx.TxIDChainHash(), 111, 0)
+	}
+
+	subtreeData := NewSubtreeData(subtree)
+	for i, tx := range txs {
+		require.NoError(t, subtreeData.AddTx(tx, i))
+	}
+
+	return subtree, subtreeData, txs
+}
+
+func TestWriteTransactionsToWriter(t *testing.T) {
+	t.Run("write full range of transactions", func(t *testing.T) {
+		subtree, subtreeData, txs := setupTestSubtreeData(t)
+
+		buf := &bytes.Buffer{}
+		err := subtreeData.WriteTransactionsToWriter(buf, 0, 4)
+		require.NoError(t, err)
+
+		newSubtreeData, err := NewSubtreeDataFromBytes(subtree, buf.Bytes())
+		require.NoError(t, err)
+		for i, tx := range txs {
+			assert.Equal(t, tx.Version, newSubtreeData.Txs[i].Version)
+		}
+	})
+
+	t.Run("write partial range", func(t *testing.T) {
+		_, subtreeData, txs := setupTestSubtreeData(t)
+
+		buf := &bytes.Buffer{}
+		err := subtreeData.WriteTransactionsToWriter(buf, 1, 3)
+		require.NoError(t, err)
+
+		expectedSize := len(txs[1].SerializeBytes()) + len(txs[2].SerializeBytes())
+		assert.Equal(t, expectedSize, buf.Len())
+	})
+
+	t.Run("error on nil transaction", func(t *testing.T) {
+		_, subtreeData, _ := setupTestSubtreeData(t)
+		subtreeData.Txs[1] = nil // Null out one transaction
+
+		buf := &bytes.Buffer{}
+		err := subtreeData.WriteTransactionsToWriter(buf, 0, 2)
+		require.ErrorIs(t, err, ErrTransactionNil)
+	})
+}
+
+func TestReadTransactionsFromReader(t *testing.T) {
+	t.Run("read full range", func(t *testing.T) {
+		subtree, sourceData, txs := setupTestSubtreeData(t)
+
+		serialized, err := sourceData.Serialize()
+		require.NoError(t, err)
+
+		targetData := NewSubtreeData(subtree)
+		numRead, err := targetData.ReadTransactionsFromReader(bytes.NewReader(serialized), 0, 4)
+		require.NoError(t, err)
+		assert.Equal(t, 4, numRead)
+
+		for i, tx := range txs {
+			assert.Equal(t, tx.Version, targetData.Txs[i].Version)
+		}
+	})
+
+	t.Run("read partial range", func(t *testing.T) {
+		subtree, sourceData, txs := setupTestSubtreeData(t)
+
+		serialized, err := sourceData.Serialize()
+		require.NoError(t, err)
+
+		targetData := NewSubtreeData(subtree)
+		numRead, err := targetData.ReadTransactionsFromReader(bytes.NewReader(serialized), 0, 2)
+		require.NoError(t, err)
+		assert.Equal(t, 2, numRead)
+
+		assert.Equal(t, txs[0].Version, targetData.Txs[0].Version)
+		assert.Equal(t, txs[1].Version, targetData.Txs[1].Version)
+		assert.Nil(t, targetData.Txs[2])
+		assert.Nil(t, targetData.Txs[3])
+	})
+
+	t.Run("read EOF gracefully", func(t *testing.T) {
+		subtree, sourceData, _ := setupTestSubtreeData(t)
+
+		serialized, err := sourceData.Serialize()
+		require.NoError(t, err)
+
+		// Try to read more transactions than available
+		targetData := NewSubtreeData(subtree)
+		numRead, err := targetData.ReadTransactionsFromReader(bytes.NewReader(serialized), 0, 10)
+		require.NoError(t, err)     // EOF not an error
+		assert.Equal(t, 4, numRead) // Only 4 available
+	})
+}
