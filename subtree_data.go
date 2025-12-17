@@ -96,7 +96,7 @@ func (s *Data) Serialize() ([]byte, error) {
 		}
 	}
 
-	bufBytes := make([]byte, 0, 32*1024) // 16MB (arbitrary size, should be enough for most cases)
+	bufBytes := make([]byte, 0, 1024*1024) // 1MB
 	buf := bytes.NewBuffer(bufBytes)
 
 	for i := txStartIndex; i < subtreeLen; i++ {
