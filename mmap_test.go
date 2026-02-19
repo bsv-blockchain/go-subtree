@@ -277,7 +277,7 @@ func TestMmapSubtree_LargeCapacity(t *testing.T) {
 
 func TestTxInpoints_SubtreeIndex(t *testing.T) {
 	inpoints := NewTxInpoints()
-	require.Equal(t, int16(-1), inpoints.SubtreeIndex, "default SubtreeIndex should be -1")
+	require.Equal(t, int16(0), inpoints.SubtreeIndex, "default SubtreeIndex should be 0 (unassigned)")
 
 	inpoints.SubtreeIndex = 42
 	require.Equal(t, int16(42), inpoints.SubtreeIndex)
