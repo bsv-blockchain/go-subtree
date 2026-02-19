@@ -126,11 +126,11 @@ func TestBuildMerkleTreeStoreFromBytesExtended(t *testing.T) {
 		// Create more than 1024 nodes to trigger parallel processing
 		nodes := make([]Node, 2048)
 		for i := 0; i < 2048; i++ {
-			hash := chainhash.HashH([]byte{byte(i >> 8), byte(i)})
+			hash := chainhash.HashH([]byte{byte(i >> 8), byte(i)}) //nolint:gosec // G115: intentional truncation for test hash data
 			nodes[i] = Node{
 				Hash:        hash,
-				Fee:         uint64(i),      //nolint:gosec // G115: Safe conversion, i is limited to 2048
-				SizeInBytes: uint64(i * 10), //nolint:gosec // G115: Safe conversion, i*10 is limited to 20480
+				Fee:         uint64(i),
+				SizeInBytes: uint64(i * 10),
 			}
 		}
 

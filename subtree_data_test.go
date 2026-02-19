@@ -373,7 +373,7 @@ func TestSerializeFromReaderErrors(t *testing.T) {
 		var txBytes []byte
 		for i := 0; i < 10; i++ {
 			txClone := tx.Clone()
-			txClone.Version = uint32(i + 1) //nolint:gosec // G115: Safe conversion, i is limited to 10
+			txClone.Version = uint32(i + 1)
 			txBytes = append(txBytes, txClone.Bytes()...)
 		}
 
@@ -397,7 +397,7 @@ func setupTestSubtreeData(t *testing.T) (*Subtree, *Data, []*bt.Tx) {
 	txs := make([]*bt.Tx, 4)
 	for i := range txs {
 		txs[i] = tx.Clone()
-		txs[i].Version = uint32(i + 1) //nolint:gosec // G115: test data, safe conversion
+		txs[i].Version = uint32(i + 1)
 	}
 
 	subtree, err := NewTree(2)

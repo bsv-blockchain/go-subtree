@@ -114,7 +114,7 @@ func FuzzNextLowerPowerOfTwo(f *testing.F) {
 		}
 
 		// Property 2: For x > 0, result should be a power of 2
-		if x > 0 && !IsPowerOfTwo(int(result)) {
+		if x > 0 && !IsPowerOfTwo(int(result)) { //nolint:gosec // G115: test validation
 			t.Errorf("NextLowerPowerOfTwo(%d) = %d, which is not a power of 2", x, result)
 		}
 
@@ -124,12 +124,12 @@ func FuzzNextLowerPowerOfTwo(f *testing.F) {
 		}
 
 		// Property 4: For x > 1, result*2 should be > x (unless x is a power of 2)
-		if x > 1 && !IsPowerOfTwo(int(x)) && result*2 <= x {
+		if x > 1 && !IsPowerOfTwo(int(x)) && result*2 <= x { //nolint:gosec // G115: test validation
 			t.Errorf("NextLowerPowerOfTwo(%d) = %d, but %d*2 = %d <= %d", x, result, result, result*2, x)
 		}
 
 		// Property 5: If x is a power of 2, result should equal x
-		if x > 0 && IsPowerOfTwo(int(x)) && result != x {
+		if x > 0 && IsPowerOfTwo(int(x)) && result != x { //nolint:gosec // G115: test validation
 			t.Errorf("NextLowerPowerOfTwo(%d) = %d, want %d (input is power of 2)", x, result, x)
 		}
 	})
