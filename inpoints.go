@@ -27,7 +27,7 @@ type TxInpoints struct {
 	nrInpoints int
 
 	// SubtreeIndex tracks which subtree this transaction belongs to in the subtree processor.
-	// -1 = current (incomplete) subtree, 0..N = index in chainedSubtrees.
+	// 0 = unassigned, 1..N+1 = index+1 in chainedSubtrees (offset by 1 so zero value = unassigned).
 	// Runtime-only — not included in serialization.
 	SubtreeIndex int16
 }
@@ -37,7 +37,7 @@ func NewTxInpoints() TxInpoints {
 	return TxInpoints{
 		ParentTxHashes: make([]chainhash.Hash, 0, 8), // initial capacity of 8 can grow as needed
 		Idxs:           make([][]uint32, 0, 16),      // the initial capacity of 16 can grow as needed
-		SubtreeIndex:   -1,                           // -1 = current/unassigned
+		SubtreeIndex:   0,                             // 0 = unassigned (set explicitly by subtreeprocessor)
 	}
 }
 
