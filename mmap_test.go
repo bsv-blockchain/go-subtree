@@ -16,7 +16,7 @@ func TestMmapSubtree_AddNodesAndRootHash(t *testing.T) {
 	// Create mmap-backed subtree
 	mmapTree, err := NewTreeMmap(2, dir) // height 2 = 4 capacity
 	require.NoError(t, err)
-	defer mmapTree.Close()
+	defer func() { require.NoError(t, mmapTree.Close()) }()
 
 	// Create heap-backed subtree for comparison
 	heapTree, err := NewTree(2)
@@ -57,7 +57,7 @@ func TestMmapSubtree_RemoveNode(t *testing.T) {
 
 	tree, err := NewTreeMmap(2, dir)
 	require.NoError(t, err)
-	defer tree.Close()
+	defer func() { require.NoError(t, tree.Close()) }()
 
 	nodes := []Node{
 		{Hash: chainhash.HashH([]byte("tx1")), Fee: 100, SizeInBytes: 250},
@@ -83,7 +83,7 @@ func TestMmapSubtree_Duplicate(t *testing.T) {
 
 	tree, err := NewTreeMmap(2, dir)
 	require.NoError(t, err)
-	defer tree.Close()
+	defer func() { require.NoError(t, tree.Close()) }()
 
 	require.NoError(t, tree.AddSubtreeNodeWithoutLock(Node{
 		Hash: chainhash.HashH([]byte("tx1")), Fee: 100, SizeInBytes: 250,
@@ -102,7 +102,7 @@ func TestMmapSubtree_Serialize(t *testing.T) {
 	// Create and populate mmap subtree
 	mmapTree, err := NewTreeMmap(2, dir)
 	require.NoError(t, err)
-	defer mmapTree.Close()
+	defer func() { require.NoError(t, mmapTree.Close()) }()
 
 	heapTree, err := NewTree(2)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestMmapSubtree_CloseCleanup(t *testing.T) {
 
 	files, err = filepath.Glob(filepath.Join(dir, "subtree-nodes-*"))
 	require.NoError(t, err)
-	require.Len(t, files, 0)
+	require.Empty(t, files)
 
 	// Double close should be safe
 	require.NoError(t, tree.Close())
@@ -173,7 +173,7 @@ func TestMmapSubtree_ByLeafCount(t *testing.T) {
 
 	tree, err := NewTreeByLeafCountMmap(1024, dir)
 	require.NoError(t, err)
-	defer tree.Close()
+	defer func() { require.NoError(t, tree.Close()) }()
 
 	require.True(t, tree.IsMmapBacked())
 	require.Equal(t, 1024, tree.Size())
@@ -184,7 +184,7 @@ func TestMmapSubtree_NodeIndex(t *testing.T) {
 
 	tree, err := NewTreeMmap(2, dir)
 	require.NoError(t, err)
-	defer tree.Close()
+	defer func() { require.NoError(t, tree.Close()) }()
 
 	hash := chainhash.HashH([]byte("tx1"))
 	require.NoError(t, tree.AddSubtreeNodeWithoutLock(Node{
@@ -222,7 +222,7 @@ func TestMmapSubtree_DeserializeFromReaderMmap(t *testing.T) {
 	// Deserialize into mmap-backed subtree
 	mmapTree, err := NewSubtreeFromReaderMmap(bytes.NewReader(serialized), dir)
 	require.NoError(t, err)
-	defer mmapTree.Close()
+	defer func() { require.NoError(t, mmapTree.Close()) }()
 
 	require.True(t, mmapTree.IsMmapBacked())
 	require.Equal(t, original.Length(), mmapTree.Length())
@@ -248,7 +248,7 @@ func TestMmapSubtree_LargeCapacity(t *testing.T) {
 	// Test with a larger subtree (64K nodes capacity)
 	tree, err := NewTreeByLeafCountMmap(65536, dir)
 	require.NoError(t, err)
-	defer tree.Close()
+	defer func() { require.NoError(t, tree.Close()) }()
 
 	require.True(t, tree.IsMmapBacked())
 	require.Equal(t, 65536, tree.Size())

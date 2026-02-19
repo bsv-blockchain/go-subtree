@@ -15,7 +15,7 @@ func TestLargeScaleMmap(t *testing.T) {
 	dir := t.TempDir()
 
 	const (
-		numSubtrees    = 128
+		numSubtrees     = 128
 		nodesPerSubtree = 65536 // 64K nodes per subtree
 	)
 
@@ -45,9 +45,8 @@ func TestLargeScaleMmap(t *testing.T) {
 
 	// Clear heap trees
 	for _, tree := range heapTrees {
-		tree.Close()
+		_ = tree.Close()
 	}
-	heapTrees = nil
 	runtime.GC()
 
 	// --- mmap-backed subtrees ---
@@ -109,7 +108,7 @@ func BenchmarkSubtreeAddNode_Mmap(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer tree.Close()
+	defer func() { _ = tree.Close() }()
 
 	node := Node{Hash: chainhash.HashH([]byte("bench")), Fee: 100, SizeInBytes: 250}
 

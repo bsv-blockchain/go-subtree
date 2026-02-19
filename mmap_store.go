@@ -48,7 +48,7 @@ func (m *mmapNodeStore) Close() error {
 // The returned slice has len=0, cap=capacity.
 func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error) {
 	if capacity <= 0 {
-		return nil, nil, fmt.Errorf("capacity must be positive, got %d", capacity)
+		return nil, nil, fmt.Errorf("%w: got %d", ErrCapacityNotPositive, capacity)
 	}
 
 	size := capacity * nodeSize
@@ -62,22 +62,22 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 
 	// Truncate to required size
 	if err = f.Truncate(int64(size)); err != nil {
-		f.Close()
-		os.Remove(filePath)
+		_ = f.Close()
+		_ = os.Remove(filePath)
 		return nil, nil, fmt.Errorf("failed to truncate file to %d bytes: %w", size, err)
 	}
 
 	// mmap the file with MAP_SHARED so writes go back to the file for OS paging
 	data, err := mmapFile(f, size)
 	if err != nil {
-		f.Close()
-		os.Remove(filePath)
+		_ = f.Close()
+		_ = os.Remove(filePath)
 		return nil, nil, fmt.Errorf("mmap failed: %w", err)
 	}
 
 	// Close the fd — the kernel keeps the mapping alive via the inode.
 	// This saves file descriptors (important at 1000+ subtrees).
-	f.Close()
+	_ = f.Close()
 
 	// Create a []Node view backed by the mmap'd memory.
 	// This is safe because Node has no pointer fields, so the GC won't scan this region.

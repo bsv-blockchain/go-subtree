@@ -232,7 +232,7 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	bytes48 := make([]byte, 48)
 	for i := uint64(0); i < numLeaves; i++ {
 		if _, err := io.ReadFull(buf, bytes48); err != nil {
-			st.Close()
+			_ = st.Close()
 			return fmt.Errorf("unable to read node %d: %w", i, err)
 		}
 
@@ -247,7 +247,7 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 
 	// Read conflicting nodes (on heap — these are small)
 	if err := st.deserializeConflictingNodes(buf); err != nil {
-		st.Close()
+		_ = st.Close()
 		return err
 	}
 

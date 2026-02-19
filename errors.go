@@ -75,3 +75,9 @@ var (
 	// ErrTransactionRead is returned when reading a transaction fails
 	ErrTransactionRead = errors.New("error reading transaction")
 )
+
+// Mmap errors
+var (
+	// ErrCapacityNotPositive is returned when mmap capacity is not positive
+	ErrCapacityNotPositive = errors.New("capacity must be positive")
+)
