@@ -63,7 +63,7 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 	// Truncate to required size
 	if err = f.Truncate(int64(size)); err != nil {
 		_ = f.Close()
-		_ = os.Remove(filePath)
+		_ = os.Remove(filePath) //nolint:gosec // G703: filePath is from os.CreateTemp, not user input
 		return nil, nil, fmt.Errorf("failed to truncate file to %d bytes: %w", size, err)
 	}
 
@@ -71,7 +71,7 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 	data, err := mmapFile(f, size)
 	if err != nil {
 		_ = f.Close()
-		_ = os.Remove(filePath)
+		_ = os.Remove(filePath) //nolint:gosec // G703: filePath is from os.CreateTemp, not user input
 		return nil, nil, fmt.Errorf("mmap failed: %w", err)
 	}
 
@@ -81,7 +81,7 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 
 	// Create a []Node view backed by the mmap'd memory.
 	// This is safe because Node has no pointer fields, so the GC won't scan this region.
-	nodes := unsafe.Slice((*Node)(unsafe.Pointer(&data[0])), capacity)[:0:capacity]
+	nodes := unsafe.Slice((*Node)(unsafe.Pointer(&data[0])), capacity)[:0:capacity] //nolint:gosec // G103: intentional unsafe for mmap-backed Node slice
 
 	store := &mmapNodeStore{
 		data:     data,

@@ -12,7 +12,7 @@ import (
 // allowing the OS to page cold data to disk and reclaim RAM.
 func mmapFile(f *os.File, size int) ([]byte, error) {
 	return syscall.Mmap(
-		int(f.Fd()),
+		int(f.Fd()), //nolint:gosec // G115: file descriptor fits in int
 		0,
 		size,
 		syscall.PROT_READ|syscall.PROT_WRITE,

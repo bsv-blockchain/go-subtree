@@ -125,21 +125,6 @@ func NewTreeByLeafCountMmap(maxNumberOfLeaves int, dir string) (*Subtree, error)
 	return NewTreeMmap(int(height), dir)
 }
 
-// Close releases resources associated with this Subtree. For mmap-backed subtrees,
-// this unmaps the memory region and removes the backing file. For heap-backed
-// subtrees, this is a no-op. Safe to call multiple times.
-func (st *Subtree) Close() error {
-	if st == nil || st.closer == nil {
-		return nil
-	}
-	return st.closer.Close()
-}
-
-// IsMmapBacked returns true if this subtree's Nodes are backed by mmap'd memory.
-func (st *Subtree) IsMmapBacked() bool {
-	return st != nil && st.closer != nil
-}
-
 // NewSubtreeFromBytes creates a new Subtree from the provided byte slice.
 func NewSubtreeFromBytes(b []byte) (*Subtree, error) {
 	defer func() {
@@ -188,70 +173,19 @@ func NewSubtreeFromReaderMmap(reader io.Reader, dir string) (*Subtree, error) {
 	return subtree, nil
 }
 
-// deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
-func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error {
-	buf := bufio.NewReaderSize(reader, 32*1024)
-
-	bytes8 := make([]byte, 8)
-
-	// read root hash
-	st.rootHash = new(chainhash.Hash)
-	if _, err := io.ReadFull(buf, st.rootHash[:]); err != nil {
-		return fmt.Errorf("unable to read root hash: %w", err)
+// Close releases resources associated with this Subtree. For mmap-backed subtrees,
+// this unmaps the memory region and removes the backing file. For heap-backed
+// subtrees, this is a no-op. Safe to call multiple times.
+func (st *Subtree) Close() error {
+	if st == nil || st.closer == nil {
+		return nil
 	}
+	return st.closer.Close()
+}
 
-	// read fees
-	if _, err := io.ReadFull(buf, bytes8); err != nil {
-		return fmt.Errorf("unable to read fees: %w", err)
-	}
-	st.Fees = binary.LittleEndian.Uint64(bytes8)
-
-	// read sizeInBytes
-	if _, err := io.ReadFull(buf, bytes8); err != nil {
-		return fmt.Errorf("unable to read sizeInBytes: %w", err)
-	}
-	st.SizeInBytes = binary.LittleEndian.Uint64(bytes8)
-
-	// read number of leaves
-	if _, err := io.ReadFull(buf, bytes8); err != nil {
-		return fmt.Errorf("unable to read number of leaves: %w", err)
-	}
-	numLeaves := binary.LittleEndian.Uint64(bytes8)
-
-	st.treeSize = int(numLeaves)
-	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
-
-	// Allocate Nodes via mmap
-	nodes, closer, err := newFileBackedMmapNodes(int(numLeaves), dir)
-	if err != nil {
-		return fmt.Errorf("mmap allocation for %d nodes failed: %w", numLeaves, err)
-	}
-	st.closer = closer
-
-	// Read nodes directly into mmap'd memory
-	bytes48 := make([]byte, 48)
-	for i := uint64(0); i < numLeaves; i++ {
-		if _, err := io.ReadFull(buf, bytes48); err != nil {
-			_ = st.Close()
-			return fmt.Errorf("unable to read node %d: %w", i, err)
-		}
-
-		node := Node{
-			Hash:        chainhash.Hash(bytes48[:32]),
-			Fee:         binary.LittleEndian.Uint64(bytes48[32:40]),
-			SizeInBytes: binary.LittleEndian.Uint64(bytes48[40:48]),
-		}
-		nodes = append(nodes, node)
-	}
-	st.Nodes = nodes
-
-	// Read conflicting nodes (on heap — these are small)
-	if err := st.deserializeConflictingNodes(buf); err != nil {
-		_ = st.Close()
-		return err
-	}
-
-	return nil
+// IsMmapBacked returns true if this subtree's Nodes are backed by mmap'd memory.
+func (st *Subtree) IsMmapBacked() bool {
+	return st != nil && st.closer != nil
 }
 
 // DeserializeNodesFromReader deserializes the nodes from the provided reader.
@@ -572,7 +506,7 @@ func (st *Subtree) GetMap() (TxMap, error) {
 
 	m := txmap.NewSwissMapUint64(lengthUint32)
 	for idx, node := range st.Nodes {
-		_ = m.Put(node.Hash, uint64(idx)) //nolint:gosec // G115: integer overflow conversion int -> uint32
+		_ = m.Put(node.Hash, uint64(idx))
 	}
 
 	return m, nil
@@ -841,6 +775,72 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 	}
 
 	if err = st.deserializeConflictingNodes(buf); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
+func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error {
+	buf := bufio.NewReaderSize(reader, 32*1024)
+
+	bytes8 := make([]byte, 8)
+
+	// read root hash
+	st.rootHash = new(chainhash.Hash)
+	if _, err := io.ReadFull(buf, st.rootHash[:]); err != nil {
+		return fmt.Errorf("unable to read root hash: %w", err)
+	}
+
+	// read fees
+	if _, err := io.ReadFull(buf, bytes8); err != nil {
+		return fmt.Errorf("unable to read fees: %w", err)
+	}
+	st.Fees = binary.LittleEndian.Uint64(bytes8)
+
+	// read sizeInBytes
+	if _, err := io.ReadFull(buf, bytes8); err != nil {
+		return fmt.Errorf("unable to read sizeInBytes: %w", err)
+	}
+	st.SizeInBytes = binary.LittleEndian.Uint64(bytes8)
+
+	// read number of leaves
+	if _, err := io.ReadFull(buf, bytes8); err != nil {
+		return fmt.Errorf("unable to read number of leaves: %w", err)
+	}
+	numLeaves := binary.LittleEndian.Uint64(bytes8)
+
+	st.treeSize = int(numLeaves) //nolint:gosec // G115: numLeaves bounded by serialized data
+	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
+
+	// Allocate Nodes via mmap
+	nodes, closer, err := newFileBackedMmapNodes(int(numLeaves), dir) //nolint:gosec // G115: numLeaves bounded by serialized data
+	if err != nil {
+		return fmt.Errorf("mmap allocation for %d nodes failed: %w", numLeaves, err)
+	}
+	st.closer = closer
+
+	// Read nodes directly into mmap'd memory
+	bytes48 := make([]byte, 48)
+	for i := uint64(0); i < numLeaves; i++ {
+		if _, err := io.ReadFull(buf, bytes48); err != nil {
+			_ = st.Close()
+			return fmt.Errorf("unable to read node %d: %w", i, err)
+		}
+
+		node := Node{
+			Hash:        chainhash.Hash(bytes48[:32]),
+			Fee:         binary.LittleEndian.Uint64(bytes48[32:40]),
+			SizeInBytes: binary.LittleEndian.Uint64(bytes48[40:48]),
+		}
+		nodes = append(nodes, node)
+	}
+	st.Nodes = nodes
+
+	// Read conflicting nodes (on heap — these are small)
+	if err := st.deserializeConflictingNodes(buf); err != nil {
+		_ = st.Close()
 		return err
 	}
 
