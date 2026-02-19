@@ -51,7 +51,7 @@ func NewTxInpointsFromTx(tx *bt.Tx) (TxInpoints, error) {
 
 // NewTxInpointsFromInputs creates a new TxInpoints object from a slice of transaction inputs.
 func NewTxInpointsFromInputs(inputs []*bt.Input) (TxInpoints, error) {
-	p := TxInpoints{SubtreeIndex: -1}
+	p := TxInpoints{}
 
 	tx := &bt.Tx{}
 	tx.Inputs = inputs
@@ -63,7 +63,7 @@ func NewTxInpointsFromInputs(inputs []*bt.Input) (TxInpoints, error) {
 
 // NewTxInpointsFromBytes creates a new TxInpoints object from a byte slice.
 func NewTxInpointsFromBytes(data []byte) (TxInpoints, error) {
-	p := TxInpoints{SubtreeIndex: -1}
+	p := TxInpoints{}
 
 	if err := p.deserializeFromReader(bytes.NewReader(data)); err != nil {
 		return p, err
@@ -74,7 +74,7 @@ func NewTxInpointsFromBytes(data []byte) (TxInpoints, error) {
 
 // NewTxInpointsFromReader creates a new TxInpoints object from an io.Reader.
 func NewTxInpointsFromReader(buf io.Reader) (TxInpoints, error) {
-	p := TxInpoints{SubtreeIndex: -1}
+	p := TxInpoints{}
 
 	if err := p.deserializeFromReader(buf); err != nil {
 		return p, err
