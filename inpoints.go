@@ -37,7 +37,7 @@ func NewTxInpoints() TxInpoints {
 	return TxInpoints{
 		ParentTxHashes: make([]chainhash.Hash, 0, 8), // initial capacity of 8 can grow as needed
 		Idxs:           make([][]uint32, 0, 16),      // the initial capacity of 16 can grow as needed
-		SubtreeIndex:   0,                             // 0 = unassigned (set explicitly by subtreeprocessor)
+		SubtreeIndex:   0,                            // 0 = unassigned (set explicitly by subtreeprocessor)
 	}
 }
 
