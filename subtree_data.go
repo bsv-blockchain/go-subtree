@@ -138,9 +138,8 @@ func (s *Data) WriteTransactionsToWriter(w io.Writer, startIdx, endIdx int) erro
 			return ErrTransactionNil
 		}
 
-		// Serialize and stream transaction bytes to writer
-		txBytes := s.Txs[i].SerializeBytes()
-		if _, err := w.Write(txBytes); err != nil {
+		// Stream transaction directly to writer without intermediate allocation
+		if _, err := s.Txs[i].SerializeTo(w); err != nil {
 			return fmt.Errorf("%w at index %d: %w", ErrTransactionWrite, i, err)
 		}
 	}
