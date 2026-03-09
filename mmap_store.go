@@ -63,7 +63,7 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 	// Truncate to required size
 	if err = f.Truncate(int64(size)); err != nil {
 		_ = f.Close()
-		_ = os.Remove(filePath) //nolint:gosec // G703: filePath is from os.CreateTemp, not user input
+		_ = os.Remove(filePath)
 		return nil, nil, fmt.Errorf("failed to truncate file to %d bytes: %w", size, err)
 	}
 
@@ -71,7 +71,7 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 	data, err := mmapFile(f, size)
 	if err != nil {
 		_ = f.Close()
-		_ = os.Remove(filePath) //nolint:gosec // G703: filePath is from os.CreateTemp, not user input
+		_ = os.Remove(filePath)
 		return nil, nil, fmt.Errorf("mmap failed: %w", err)
 	}
 
