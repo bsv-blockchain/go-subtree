@@ -7,7 +7,6 @@ require (
 	github.com/bsv-blockchain/go-safe-conversion v1.1.3
 	github.com/bsv-blockchain/go-tx-map v1.3.5
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
 )
 
 require (
