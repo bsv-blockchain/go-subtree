@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/bsv-blockchain/go-bt/v2 v2.6.3
-	github.com/bsv-blockchain/go-safe-conversion v1.1.3
+	github.com/bsv-blockchain/go-safe-conversion v1.2.0
 	github.com/bsv-blockchain/go-tx-map v1.3.5
 	github.com/stretchr/testify v1.11.1
 )
