@@ -9,13 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// txInpointsFromParentVouts builds a TxInpoints with a single parent hash and
+// the given vouts. Used by tests to replace the previous struct-literal
+// construction with Idxs: [][]uint32{{...}}.
+func txInpointsFromParentVouts(parent chainhash.Hash, vouts ...uint32) TxInpoints {
+	p := NewTxInpoints()
+	for _, v := range vouts {
+		p.appendInput(parent, v)
+	}
+
+	return p
+}
+
 func TestTxInpoints(t *testing.T) {
 	t.Run("TestTxInpoints", func(t *testing.T) {
 		p, err := NewTxInpointsFromTx(tx)
 		require.NoError(t, err)
 
-		assert.Len(t, p.ParentTxHashes, 1)
-		assert.Len(t, p.Idxs[0], 1)
+		require.Len(t, p.ParentTxHashes, 1)
+
+		vouts, err := p.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+		require.Len(t, vouts, 1)
 	})
 
 	t.Run("serialize", func(t *testing.T) {
@@ -24,22 +39,31 @@ func TestTxInpoints(t *testing.T) {
 
 		b, err := p.Serialize()
 		require.NoError(t, err)
-		assert.Len(t, b, 44)
+		require.Len(t, b, 44)
 
 		p2, err := NewTxInpointsFromBytes(b)
 		require.NoError(t, err)
 
-		assert.Len(t, p2.ParentTxHashes, 1)
-		assert.Len(t, p2.Idxs[0], 1)
+		require.Len(t, p2.ParentTxHashes, 1)
 
+		vouts1, err := p.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+
+		vouts2, err := p2.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+
+		require.Len(t, vouts2, 1)
 		assert.Equal(t, p.ParentTxHashes[0], p2.ParentTxHashes[0])
-		assert.Equal(t, p.Idxs[0][0], p2.Idxs[0][0])
+		assert.Equal(t, vouts1[0], vouts2[0])
 	})
 
-	t.Run("serialize with error", func(t *testing.T) {
+	t.Run("serialize with mismatched parent/vout state", func(t *testing.T) {
+		// Construct an inconsistent state: one parent hash but no count word
+		// in voutIdxs. With the field unexported this state can only be
+		// fabricated from within the package — Serialize must still detect it.
 		p := NewTxInpoints()
 		p.ParentTxHashes = []chainhash.Hash{chainhash.HashH([]byte("test"))}
-		p.Idxs = [][]uint32{}
+		p.voutIdxs = nil
 
 		_, err := p.Serialize()
 		require.Error(t, err)
@@ -53,10 +77,16 @@ func TestTxInpoints(t *testing.T) {
 		require.NoError(t, err)
 
 		// make sure they are the same
-		assert.Len(t, p2.ParentTxHashes, len(p.ParentTxHashes))
-		assert.Len(t, p2.Idxs, len(p.Idxs))
+		require.Len(t, p2.ParentTxHashes, len(p.ParentTxHashes))
+
+		v1, err := p.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+
+		v2, err := p2.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+
 		assert.Equal(t, p.ParentTxHashes[0], p2.ParentTxHashes[0])
-		assert.Equal(t, p.Idxs[0][0], p2.Idxs[0][0])
+		assert.Equal(t, v1, v2)
 	})
 }
 
@@ -104,7 +134,7 @@ func TestGetParentVoutsAtIndex(t *testing.T) {
 		vouts, err := p.GetParentVoutsAtIndex(0)
 		require.NoError(t, err)
 
-		assert.Len(t, vouts, 1)
+		require.Len(t, vouts, 1)
 		assert.Equal(t, uint32(5), vouts[0])
 	})
 
@@ -120,11 +150,49 @@ func TestGetParentVoutsAtIndex(t *testing.T) {
 	})
 }
 
+func TestTxInpoints_DedupAndRoundTrip(t *testing.T) {
+	// Build inputs where two inputs share parent A (vouts 7 then 9) and
+	// one input pulls from parent B (vout 3). Order matters: A then B then A.
+	a := chainhash.HashH([]byte("parent-a"))
+	b := chainhash.HashH([]byte("parent-b"))
+
+	p := NewTxInpoints()
+	p.appendInput(a, 7)
+	p.appendInput(b, 3)
+	p.appendInput(a, 9)
+
+	require.Equal(t, []chainhash.Hash{a, b}, p.ParentTxHashes)
+
+	voutsA, err := p.GetParentVoutsAtIndex(0)
+	require.NoError(t, err)
+	require.Equal(t, []uint32{7, 9}, voutsA)
+
+	voutsB, err := p.GetParentVoutsAtIndex(1)
+	require.NoError(t, err)
+	require.Equal(t, []uint32{3}, voutsB)
+
+	require.Equal(t, 3, p.nrInputs())
+
+	// Round-trip through wire format.
+	raw, err := p.Serialize()
+	require.NoError(t, err)
+
+	q, err := NewTxInpointsFromBytes(raw)
+	require.NoError(t, err)
+
+	require.Equal(t, p.ParentTxHashes, q.ParentTxHashes)
+	require.Equal(t, p.voutIdxs, q.voutIdxs)
+
+	// GetTxInpoints flattens in parent-then-vout order.
+	flat := q.GetTxInpoints()
+	require.Equal(t, []Inpoint{{a, 7}, {a, 9}, {b, 3}}, flat)
+}
+
 func TestString(t *testing.T) {
 	p, err := NewTxInpointsFromTx(tx)
 	require.NoError(t, err)
 
-	// Test String method
+	// Test String method — format kept compatible with the pre-packed version.
 	str := p.String()
 	assert.NotEmpty(t, str)
 	assert.Contains(t, str, "TxInpoints")

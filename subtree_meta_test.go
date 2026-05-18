@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/bsv-blockchain/go-bt/v2"
-	"github.com/bsv-blockchain/go-bt/v2/chainhash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -285,11 +284,9 @@ func TestMetaSetTxInpoints(t *testing.T) {
 		txs, _, subtreeMeta := initMeta(t)
 
 		// Test setting inpoints for a subtree node that does not exist
-		err := subtreeMeta.SetTxInpoints(2, TxInpoints{
-			ParentTxHashes: []chainhash.Hash{*txs[0].Inputs[0].PreviousTxIDChainHash()},
-			Idxs:           [][]uint32{{1, 2, 3}},
-			nrInpoints:     3,
-		})
+		err := subtreeMeta.SetTxInpoints(2, txInpointsFromParentVouts(
+			*txs[0].Inputs[0].PreviousTxIDChainHash(), 1, 2, 3,
+		))
 		require.NoError(t, err)
 
 		inpoints, err := subtreeMeta.GetTxInpoints(2)
@@ -304,11 +301,9 @@ func TestMetaSetTxInpoints(t *testing.T) {
 		assert.Equal(t, uint32(3), inpoints[2].Index)
 
 		// Test setting inpoints for a subtree node that does not exist
-		err = subtreeMeta.SetTxInpoints(5, TxInpoints{
-			ParentTxHashes: []chainhash.Hash{*txs[0].Inputs[0].PreviousTxIDChainHash()},
-			Idxs:           [][]uint32{{1, 2, 3}},
-			nrInpoints:     3,
-		})
+		err = subtreeMeta.SetTxInpoints(5, txInpointsFromParentVouts(
+			*txs[0].Inputs[0].PreviousTxIDChainHash(), 1, 2, 3,
+		))
 		require.Error(t, err)
 		assert.Equal(t, "index out of range", err.Error())
 	})
