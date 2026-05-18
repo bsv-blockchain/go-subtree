@@ -781,6 +781,86 @@ func (st *Subtree) Deserialize(b []byte) (err error) {
 	return st.DeserializeFromReader(buf)
 }
 
+// NodeAllocator is a caller-supplied function that returns a backing slice for
+// the deserializer to write Nodes into. The returned slice MUST have
+// cap >= numLeaves; the deserializer will reslice it down to [:numLeaves]. A
+// nil NodeAllocator instructs the deserializer to allocate a fresh slice with
+// make, preserving the legacy behaviour.
+type NodeAllocator func(numLeaves int) []Node
+
+// DeserializeFromReaderWithAllocator is identical in semantics to
+// DeserializeFromReader, except that the backing storage for st.Nodes is
+// obtained from the caller-supplied NodeAllocator. This allows callers to pool
+// per-subtree Node arrays across blocks, eliminating ~29 GB of allocation churn
+// per 654M-tx block on the validator hot path.
+//
+// If alloc is nil, the behaviour falls back to plain make() — equivalent to
+// calling DeserializeFromReader directly.
+//
+// Ownership of the underlying slice is transferred to the Subtree until the
+// caller invokes ReleaseNodes (or the Subtree is closed). The deserializer
+// expects alloc to return a slice with cap >= numLeaves; if cap is smaller the
+// extra space is allocated transparently and the pool gets the smaller slice
+// back on ReleaseNodes (caller can choose to discard small-cap returns).
+func (st *Subtree) DeserializeFromReaderWithAllocator(reader io.Reader, alloc NodeAllocator) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("recovered in DeserializeFromReaderWithAllocator: %w: %v", err, r)
+		}
+	}()
+
+	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
+
+	bytes8 := make([]byte, 8)
+
+	// read root hash
+	st.rootHash = new(chainhash.Hash)
+	if _, err = io.ReadFull(buf, st.rootHash[:]); err != nil {
+		return fmt.Errorf("unable to read root hash: %w", err)
+	}
+
+	// read fees
+	if _, err = io.ReadFull(buf, bytes8); err != nil {
+		return fmt.Errorf("unable to read fees: %w", err)
+	}
+
+	st.Fees = binary.LittleEndian.Uint64(bytes8)
+
+	// read sizeInBytes
+	if _, err = io.ReadFull(buf, bytes8); err != nil {
+		return fmt.Errorf("unable to read sizeInBytes: %w", err)
+	}
+
+	st.SizeInBytes = binary.LittleEndian.Uint64(bytes8)
+
+	if err = st.deserializeNodesWithAllocator(buf, alloc); err != nil {
+		return err
+	}
+
+	if err = st.deserializeConflictingNodes(buf); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ReleaseNodes hands the underlying Nodes backing slice back to the caller and
+// sets st.Nodes = nil. The returned slice is the full backing array (length =
+// original cap), so callers placing it in a sync.Pool reuse the whole capacity
+// rather than the truncated length. Returns nil if the Subtree has no Nodes
+// (e.g. mmap-backed or already released). After this call the Subtree must not
+// be used to read or mutate node data.
+func (st *Subtree) ReleaseNodes() []Node {
+	if st.Nodes == nil {
+		return nil
+	}
+
+	nodes := st.Nodes[:cap(st.Nodes)]
+	st.Nodes = nil
+
+	return nodes
+}
+
 // DeserializeFromReader deserializes the subtree from the provided reader.
 func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
 	defer func() {
@@ -907,6 +987,53 @@ func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
 
 	// read leaves
 	st.Nodes = make([]Node, numLeaves)
+
+	bytes48 := make([]byte, 48)
+	for i := uint64(0); i < numLeaves; i++ {
+		// read all the node data in 1 go
+		if _, err := io.ReadFull(buf, bytes48); err != nil {
+			return fmt.Errorf("unable to read node: %w", err)
+		}
+
+		st.Nodes[i].Hash = chainhash.Hash(bytes48[:32])
+		st.Nodes[i].Fee = binary.LittleEndian.Uint64(bytes48[32:40])
+		st.Nodes[i].SizeInBytes = binary.LittleEndian.Uint64(bytes48[40:48])
+	}
+
+	return nil
+}
+
+// deserializeNodesWithAllocator is the allocator-aware twin of deserializeNodes.
+// When alloc is non-nil, its returned slice supplies the backing storage for
+// st.Nodes (resliced to [:numLeaves]). When alloc is nil OR the supplied slice
+// has insufficient cap, it falls back to make([]Node, numLeaves).
+func (st *Subtree) deserializeNodesWithAllocator(buf *bufio.Reader, alloc NodeAllocator) error {
+	bytes8 := make([]byte, 8)
+
+	// read number of leaves
+	if _, err := io.ReadFull(buf, bytes8); err != nil {
+		return fmt.Errorf("unable to read number of leaves: %w", err)
+	}
+
+	numLeaves := binary.LittleEndian.Uint64(bytes8)
+
+	st.treeSize = int(numLeaves) //nolint:gosec // G115: integer overflow conversion int -> uint32
+	// the height of a subtree is always a power of two
+	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
+
+	// Obtain backing storage from caller or fall back to make. The fallback path
+	// also catches the case where the caller's allocator returned a too-small
+	// slice — safer than panicking.
+	if alloc != nil {
+		s := alloc(int(numLeaves)) //nolint:gosec // G115: numLeaves bounded by serialized data
+		if cap(s) >= int(numLeaves) { //nolint:gosec // G115
+			st.Nodes = s[:numLeaves]
+		} else {
+			st.Nodes = make([]Node, numLeaves)
+		}
+	} else {
+		st.Nodes = make([]Node, numLeaves)
+	}
 
 	bytes48 := make([]byte, 48)
 	for i := uint64(0); i < numLeaves; i++ {

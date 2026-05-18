@@ -1241,3 +1241,106 @@ func TestGetMerkleProofOddLeaves(t *testing.T) {
 		require.Equal(t, lastNodeHash.String(), proof[0].String())
 	})
 }
+
+// buildSerializedSubtree builds a tiny serialized subtree with 4 deterministic
+// nodes and returns the bytes for round-trip tests.
+func buildSerializedSubtree(t *testing.T) []byte {
+	t.Helper()
+
+	st, err := NewTree(2)
+	require.NoError(t, err)
+
+	hash1, _ := chainhash.NewHashFromStr("8c14f0db3df150123e6f3dbbf30f8b955a8249b62ac1d1ff16284aefa3d06d87")
+	hash2, _ := chainhash.NewHashFromStr("fff2525b8931402dd09222c50775608f75787bd2b87e56995a7bdd30f79702c4")
+	hash3, _ := chainhash.NewHashFromStr("6359f0868171b1d194cbee1af2f16ea598ae8fad666d9b012c8ed2b79a236ec4")
+	hash4, _ := chainhash.NewHashFromStr("e9a66845e05d5abc0ad04ec80f774a7e585c6e8db975962d069a522137b80c1d")
+
+	require.NoError(t, st.AddNode(*hash1, 111, 0))
+	require.NoError(t, st.AddNode(*hash2, 222, 0))
+	require.NoError(t, st.AddNode(*hash3, 333, 0))
+	require.NoError(t, st.AddNode(*hash4, 444, 0))
+
+	b, err := st.Serialize()
+	require.NoError(t, err)
+
+	return b
+}
+
+func TestDeserializeFromReaderWithAllocator_UsesProvidedSlice(t *testing.T) {
+	serialized := buildSerializedSubtree(t)
+
+	// Pre-allocate a backing slice with extra capacity. We track the underlying
+	// pointer to prove the deserializer wrote into THIS slice rather than
+	// allocating a fresh one.
+	backing := make([]Node, 0, 64)
+	wantPtr := &backing[:1][0]
+
+	var (
+		seenNumLeaves int
+		allocCalls    int
+	)
+
+	alloc := func(n int) []Node {
+		allocCalls++
+		seenNumLeaves = n
+		return backing
+	}
+
+	st := &Subtree{}
+	require.NoError(t, st.DeserializeFromReaderWithAllocator(bytes.NewReader(serialized), alloc))
+
+	require.Equal(t, 1, allocCalls, "allocator must be called exactly once")
+	require.Equal(t, 4, seenNumLeaves, "allocator must receive the leaf count")
+	require.Len(t, st.Nodes, 4)
+	require.GreaterOrEqual(t, cap(st.Nodes), 64, "cap of deserialised Nodes must reflect backing slice capacity")
+
+	gotPtr := &st.Nodes[:1][0]
+	require.Same(t, wantPtr, gotPtr, "Nodes must alias the backing slice provided by the allocator")
+}
+
+func TestDeserializeFromReaderWithAllocator_NilFallback(t *testing.T) {
+	serialized := buildSerializedSubtree(t)
+
+	st := &Subtree{}
+	require.NoError(t, st.DeserializeFromReaderWithAllocator(bytes.NewReader(serialized), nil))
+
+	require.Len(t, st.Nodes, 4)
+	require.Equal(t, uint64(111), st.Nodes[0].Fee)
+	require.Equal(t, uint64(222), st.Nodes[1].Fee)
+	require.Equal(t, uint64(333), st.Nodes[2].Fee)
+	require.Equal(t, uint64(444), st.Nodes[3].Fee)
+}
+
+func TestDeserializeFromReaderWithAllocator_TooSmallFallsBackToMake(t *testing.T) {
+	serialized := buildSerializedSubtree(t)
+
+	alloc := func(_ int) []Node {
+		// Deliberately undersized — deserializer must fall back to make rather
+		// than panic or corrupt the heap.
+		return make([]Node, 0, 1)
+	}
+
+	st := &Subtree{}
+	require.NoError(t, st.DeserializeFromReaderWithAllocator(bytes.NewReader(serialized), alloc))
+	require.Len(t, st.Nodes, 4)
+}
+
+func TestReleaseNodes_ReturnsFullCap(t *testing.T) {
+	serialized := buildSerializedSubtree(t)
+
+	backing := make([]Node, 0, 64)
+	alloc := func(_ int) []Node { return backing }
+
+	st := &Subtree{}
+	require.NoError(t, st.DeserializeFromReaderWithAllocator(bytes.NewReader(serialized), alloc))
+	require.Equal(t, 64, cap(st.Nodes))
+
+	released := st.ReleaseNodes()
+	require.NotNil(t, released)
+	require.Equal(t, 64, cap(released), "released slice must expose the full backing capacity")
+	require.Equal(t, 64, len(released), "released slice length must equal cap")
+	require.Nil(t, st.Nodes, "Subtree.Nodes must be nil after release")
+
+	// A second release on an emptied Subtree is a no-op.
+	require.Nil(t, st.ReleaseNodes())
+}
