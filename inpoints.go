@@ -86,6 +86,32 @@ func NewTxInpointsFromInputs(inputs []*bt.Input) (TxInpoints, error) {
 	return newSizedFromInputs(inputs), nil
 }
 
+// NewTxInpointsFromPacked builds a TxInpoints whose internal storage *aliases*
+// the supplied slices. Zero allocation, zero validation: a hot-path
+// constructor for trusted callers that already hold the packed layout in a
+// large shared buffer (e.g., columnar gRPC requests where the validator has
+// pre-arranged the data).
+//
+// The caller MUST guarantee that:
+//
+//  1. voutIdxs is laid out as the count-prefixed packed form documented on
+//     TxInpoints: for each parent in `parents` order, one count word followed
+//     by that many vout-value words, concatenated. Total length =
+//     len(parents) + sum(count_i).
+//  2. The two slices outlive every reference to the returned TxInpoints
+//     (including copies); this constructor does NOT copy.
+//
+// Malformed input will not be detected here — accessors will read garbage or
+// panic with index-out-of-range at use time. Wire-format validation belongs
+// in the sender. Callers that need defensive construction from untrusted
+// bytes should use NewTxInpointsFromBytes / NewTxInpointsFromReader.
+func NewTxInpointsFromPacked(parents []chainhash.Hash, voutIdxs []uint32) TxInpoints {
+	return TxInpoints{
+		ParentTxHashes: parents,
+		voutIdxs:       voutIdxs,
+	}
+}
+
 // NewTxInpointsFromBytes creates a new TxInpoints object from a byte slice.
 func NewTxInpointsFromBytes(data []byte) (TxInpoints, error) {
 	p := TxInpoints{}

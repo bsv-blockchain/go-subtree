@@ -244,6 +244,81 @@ func TestNewTxInpointsFromReaderError(t *testing.T) {
 	})
 }
 
+func TestNewTxInpointsFromPacked(t *testing.T) {
+	a := chainhash.HashH([]byte("a"))
+	b := chainhash.HashH([]byte("b"))
+
+	t.Run("single parent single vout", func(t *testing.T) {
+		// layout: [count=1, vout=7]
+		p := NewTxInpointsFromPacked([]chainhash.Hash{a}, []uint32{1, 7})
+		require.Equal(t, []chainhash.Hash{a}, p.ParentTxHashes)
+
+		vouts, err := p.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+		require.Equal(t, []uint32{7}, vouts)
+	})
+
+	t.Run("two parents multiple vouts", func(t *testing.T) {
+		// layout: [count=2, 4, 5, count=1, 9]
+		p := NewTxInpointsFromPacked(
+			[]chainhash.Hash{a, b},
+			[]uint32{2, 4, 5, 1, 9},
+		)
+
+		v0, err := p.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+		require.Equal(t, []uint32{4, 5}, v0)
+
+		v1, err := p.GetParentVoutsAtIndex(1)
+		require.NoError(t, err)
+		require.Equal(t, []uint32{9}, v1)
+
+		require.Equal(t, 3, p.nrInputs())
+	})
+
+	t.Run("aliases input slices", func(t *testing.T) {
+		parents := []chainhash.Hash{a}
+		vouts := []uint32{1, 42}
+
+		p := NewTxInpointsFromPacked(parents, vouts)
+
+		// Mutate the caller-owned slices and observe TxInpoints sees it —
+		// this is the contract of the function (caller must keep storage
+		// stable for the lifetime of the TxInpoints).
+		vouts[1] = 1234
+
+		got, err := p.GetParentVoutsAtIndex(0)
+		require.NoError(t, err)
+		require.Equal(t, uint32(1234), got[0])
+	})
+
+	t.Run("round-trip with NewTxInpointsFromInputs", func(t *testing.T) {
+		// Build with the slice-construction path, then re-wrap via Packed —
+		// the inner fields must be byte-identical.
+		original, err := NewTxInpointsFromTx(tx)
+		require.NoError(t, err)
+
+		wrapped := NewTxInpointsFromPacked(original.ParentTxHashes, original.voutIdxs)
+		require.Equal(t, original.ParentTxHashes, wrapped.ParentTxHashes)
+		require.Equal(t, original.voutIdxs, wrapped.voutIdxs)
+	})
+}
+
+// BenchmarkNewTxInpointsFromPacked measures the hot path block-assembly takes
+// after PR2 in teranode — pre-packed slices arrive over gRPC and TxInpoints
+// aliases them with zero allocation.
+func BenchmarkNewTxInpointsFromPacked(b *testing.B) {
+	parents := []chainhash.Hash{chainhash.HashH([]byte("a"))}
+	vouts := []uint32{1, 5}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_ = NewTxInpointsFromPacked(parents, vouts)
+	}
+}
+
 func BenchmarkNewTxInpoints(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err := NewTxInpointsFromTx(tx)
