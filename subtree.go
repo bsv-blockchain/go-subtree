@@ -862,46 +862,12 @@ func (st *Subtree) ReleaseNodes() []Node {
 }
 
 // DeserializeFromReader deserializes the subtree from the provided reader.
-func (st *Subtree) DeserializeFromReader(reader io.Reader) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("recovered in DeserializeFromReader: %w: %v", err, r)
-		}
-	}()
-
-	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
-
-	bytes8 := make([]byte, 8)
-
-	// read root hash
-	st.rootHash = new(chainhash.Hash)
-	if _, err = io.ReadFull(buf, st.rootHash[:]); err != nil {
-		return fmt.Errorf("unable to read root hash: %w", err)
-	}
-
-	// read fees
-	if _, err = io.ReadFull(buf, bytes8); err != nil {
-		return fmt.Errorf("unable to read fees: %w", err)
-	}
-
-	st.Fees = binary.LittleEndian.Uint64(bytes8)
-
-	// read sizeInBytes
-	if _, err = io.ReadFull(buf, bytes8); err != nil {
-		return fmt.Errorf("unable to read sizeInBytes: %w", err)
-	}
-
-	st.SizeInBytes = binary.LittleEndian.Uint64(bytes8)
-
-	if err = st.deserializeNodes(buf); err != nil {
-		return err
-	}
-
-	if err = st.deserializeConflictingNodes(buf); err != nil {
-		return err
-	}
-
-	return nil
+// Equivalent to DeserializeFromReaderWithAllocator(reader, nil): node backing
+// storage is allocated via make(). Preserved as a separate entry point for
+// API compatibility with the many existing callers that have no need for a
+// caller-supplied NodeAllocator.
+func (st *Subtree) DeserializeFromReader(reader io.Reader) error {
+	return st.DeserializeFromReaderWithAllocator(reader, nil)
 }
 
 // deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
@@ -971,36 +937,11 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 }
 
 // deserializeNodes deserializes the nodes from the provided buffered reader.
+// deserializeNodes deserializes the node array using a fresh make() allocation.
+// Thin wrapper around deserializeNodesWithAllocator(buf, nil) for symmetry with
+// the public DeserializeFromReader entry point.
 func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
-	bytes8 := make([]byte, 8)
-
-	// read number of leaves
-	if _, err := io.ReadFull(buf, bytes8); err != nil {
-		return fmt.Errorf("unable to read number of leaves: %w", err)
-	}
-
-	numLeaves := binary.LittleEndian.Uint64(bytes8)
-
-	st.treeSize = int(numLeaves) //nolint:gosec // G115: integer overflow conversion int -> uint32
-	// the height of a subtree is always a power of two
-	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
-
-	// read leaves
-	st.Nodes = make([]Node, numLeaves)
-
-	bytes48 := make([]byte, 48)
-	for i := uint64(0); i < numLeaves; i++ {
-		// read all the node data in 1 go
-		if _, err := io.ReadFull(buf, bytes48); err != nil {
-			return fmt.Errorf("unable to read node: %w", err)
-		}
-
-		st.Nodes[i].Hash = chainhash.Hash(bytes48[:32])
-		st.Nodes[i].Fee = binary.LittleEndian.Uint64(bytes48[32:40])
-		st.Nodes[i].SizeInBytes = binary.LittleEndian.Uint64(bytes48[40:48])
-	}
-
-	return nil
+	return st.deserializeNodesWithAllocator(buf, nil)
 }
 
 // deserializeNodesWithAllocator is the allocator-aware twin of deserializeNodes.
