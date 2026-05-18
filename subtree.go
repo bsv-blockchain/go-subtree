@@ -936,15 +936,7 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	return nil
 }
 
-// deserializeNodes deserializes the nodes from the provided buffered reader.
-// deserializeNodes deserializes the node array using a fresh make() allocation.
-// Thin wrapper around deserializeNodesWithAllocator(buf, nil) for symmetry with
-// the public DeserializeFromReader entry point.
-func (st *Subtree) deserializeNodes(buf *bufio.Reader) error {
-	return st.deserializeNodesWithAllocator(buf, nil)
-}
-
-// deserializeNodesWithAllocator is the allocator-aware twin of deserializeNodes.
+// deserializeNodesWithAllocator deserializes the node array.
 // When alloc is non-nil, its returned slice supplies the backing storage for
 // st.Nodes (resliced to [:numLeaves]). When alloc is nil OR the supplied slice
 // has insufficient cap, it falls back to make([]Node, numLeaves).
