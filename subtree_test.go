@@ -1338,7 +1338,7 @@ func TestReleaseNodes_ReturnsFullCap(t *testing.T) {
 	released := st.ReleaseNodes()
 	require.NotNil(t, released)
 	require.Equal(t, 64, cap(released), "released slice must expose the full backing capacity")
-	require.Equal(t, 64, len(released), "released slice length must equal cap")
+	require.Len(t, released, 64, "released slice length must equal cap")
 	require.Nil(t, st.Nodes, "Subtree.Nodes must be nil after release")
 
 	// A second release on an emptied Subtree is a no-op.

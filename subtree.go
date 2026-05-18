@@ -785,7 +785,7 @@ func (st *Subtree) Deserialize(b []byte) (err error) {
 // the deserializer to write Nodes into. The returned slice MUST have
 // cap >= numLeaves; the deserializer will reslice it down to [:numLeaves]. A
 // nil NodeAllocator instructs the deserializer to allocate a fresh slice with
-// make, preserving the legacy behaviour.
+// make, preserving the legacy behavior.
 type NodeAllocator func(numLeaves int) []Node
 
 // DeserializeFromReaderWithAllocator is identical in semantics to
@@ -794,7 +794,7 @@ type NodeAllocator func(numLeaves int) []Node
 // per-subtree Node arrays across blocks, eliminating ~29 GB of allocation churn
 // per 654M-tx block on the validator hot path.
 //
-// If alloc is nil, the behaviour falls back to plain make() — equivalent to
+// If alloc is nil, the behavior falls back to plain make() — equivalent to
 // calling DeserializeFromReader directly.
 //
 // Ownership of the underlying slice is transferred to the Subtree until the
@@ -1025,7 +1025,7 @@ func (st *Subtree) deserializeNodesWithAllocator(buf *bufio.Reader, alloc NodeAl
 	// also catches the case where the caller's allocator returned a too-small
 	// slice — safer than panicking.
 	if alloc != nil {
-		s := alloc(int(numLeaves)) //nolint:gosec // G115: numLeaves bounded by serialized data
+		s := alloc(int(numLeaves))    //nolint:gosec // G115: numLeaves bounded by serialized data
 		if cap(s) >= int(numLeaves) { //nolint:gosec // G115
 			st.Nodes = s[:numLeaves]
 		} else {
