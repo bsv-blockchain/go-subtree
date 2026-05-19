@@ -504,7 +504,7 @@ func (st *Subtree) RootHashPadded(targetHeight int) (*chainhash.Hash, error) {
 		return nil, nil //nolint:nilnil // mirrors RootHash's nil-for-empty contract; empty subtree is not an error condition
 	}
 
-	actualHeight := bits.Len(uint(length - 1)) //nolint:gosec // G115: length >= 1 here, so length-1 >= 0
+	actualHeight := bits.Len(uint(length - 1))
 	if targetHeight < actualHeight {
 		return nil, ErrTargetHeightTooSmall
 	}
