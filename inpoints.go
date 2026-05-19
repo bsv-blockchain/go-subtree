@@ -67,10 +67,19 @@ type TxInpoints struct {
 // append-driven growth. With the packed layout the upper bound on slice size
 // is always known at construction time (len(tx.Inputs)), so callers that build
 // from a tx should use NewTxInpointsFromTx / NewTxInpointsFromInputs which
-// size exactly and never re-grow. NewTxInpoints exists for callers that want
-// an empty zero-value placeholder; it allocates nothing.
+// size exactly and never re-grow.
+//
+// NewTxInpoints exists for callers that want an empty placeholder. The
+// returned value has a non-nil-but-empty ParentTxHashes — Meta.Serialize
+// distinguishes "no inpoints set yet" (nil) from "this node has no parents"
+// (empty), and SubtreeMeta consumers depend on the latter shape for
+// non-coinbase nodes that legitimately have zero unique parents. The slice
+// header points at the runtime's zero-cap sentinel, so no heap allocation
+// is incurred.
 func NewTxInpoints() TxInpoints {
-	return TxInpoints{}
+	return TxInpoints{
+		ParentTxHashes: []chainhash.Hash{},
+	}
 }
 
 // NewTxInpointsFromTx creates a new TxInpoints object from a given transaction.
