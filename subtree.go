@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/bits"
 	"sync"
 
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
@@ -483,9 +484,14 @@ func (st *Subtree) RootHash() *chainhash.Hash {
 // slots. This makes the composition of subtree roots produce the same result as
 // building a single merkle tree over all leaves.
 //
+// The subtree's leaf count does NOT need to be a power of two:
+// BuildMerkleTreeStoreFromBytes already applies the duplicate-when-odd rule at
+// every internal level, so the natural root lives at height
+// ceil(log2(length)) for any length >= 1. Self-hashing from there up to
+// targetHeight composes correctly with the canonical flat merkle tree.
+//
 // Preconditions:
-//   - len(Nodes) must be a power of two (or 0).
-//   - targetHeight must be >= the height implied by the actual leaf count.
+//   - targetHeight must be >= ceil(log2(length)) implied by the actual leaf count.
 //
 // Returns (nil, nil) for an empty subtree, matching RootHash's behavior.
 func (st *Subtree) RootHashPadded(targetHeight int) (*chainhash.Hash, error) {
@@ -498,11 +504,7 @@ func (st *Subtree) RootHashPadded(targetHeight int) (*chainhash.Hash, error) {
 		return nil, nil //nolint:nilnil // mirrors RootHash's nil-for-empty contract; empty subtree is not an error condition
 	}
 
-	if !IsPowerOfTwo(length) {
-		return nil, ErrNotPowerOfTwoLeafCount
-	}
-
-	actualHeight := int(math.Log2(float64(length)))
+	actualHeight := bits.Len(uint(length - 1))
 	if targetHeight < actualHeight {
 		return nil, ErrTargetHeightTooSmall
 	}

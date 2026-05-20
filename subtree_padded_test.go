@@ -2,6 +2,7 @@ package subtree
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"testing"
 
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
@@ -57,8 +58,14 @@ func TestRootHashPadded_EmptySubtreeReturnsNil(t *testing.T) {
 	require.Nil(t, padded)
 }
 
-func TestRootHashPadded_NotPowerOfTwoErrors(t *testing.T) {
-	st, err := NewTreeByLeafCount(4)
+// TestRootHashPadded_AcceptsNonPowerOfTwoLeafCount verifies that RootHashPadded
+// accepts subtrees whose leaf count is not a power of two and returns a lifted
+// root that matches the canonical flat merkle tree at the same height. The
+// duplicate-when-odd rule applied inside BuildMerkleTreeStoreFromBytes already
+// pads the natural root to height ceil(log2(length)), so no special handling
+// is needed at the caller.
+func TestRootHashPadded_AcceptsNonPowerOfTwoLeafCount(t *testing.T) {
+	st, err := NewIncompleteTreeByLeafCount(3)
 	require.NoError(t, err)
 
 	h := chainhash.HashH([]byte{0x01})
@@ -68,8 +75,23 @@ func TestRootHashPadded_NotPowerOfTwoErrors(t *testing.T) {
 	h3 := chainhash.HashH([]byte{0x03})
 	require.NoError(t, st.AddNode(h3, 0, 0))
 
-	_, err = st.RootHashPadded(2)
-	require.ErrorIs(t, err, ErrNotPowerOfTwoLeafCount)
+	// ceil(log2(3)) == 2, so the natural root already sits at height 2.
+	padded, err := st.RootHashPadded(2)
+	require.NoError(t, err)
+	require.Equal(t, st.RootHash().String(), padded.String())
+
+	// Lifting one level above the natural height should self-hash once.
+	lifted, err := st.RootHashPadded(3)
+	require.NoError(t, err)
+
+	expected := *st.RootHash()
+	var buf [64]byte
+	copy(buf[0:32], expected[:])
+	copy(buf[32:64], expected[:])
+	first := sha256.Sum256(buf[:])
+	expected = chainhash.Hash(sha256.Sum256(first[:]))
+
+	require.Equal(t, expected.String(), lifted.String())
 }
 
 func TestRootHashPadded_TargetHeightTooSmallErrors(t *testing.T) {
@@ -169,4 +191,58 @@ func TestRootHashPadded_MatchesBitcoinRootAt258Txs(t *testing.T) {
 	require.NoError(t, tree4.AddNode(*tree3Root, 0, 0))
 
 	require.Equal(t, bitcoinRoot.String(), tree4.RootHash().String())
+}
+
+// TestRootHashPadded_MatchesFlatTreeForNonPowerOfTwoFinal sweeps a range of
+// non-power-of-two leaf counts in the final subtree and verifies that the
+// composed root (complete left subtree + lifted right subtree) equals the
+// canonical flat merkle root for each case. The chosen `r` values cover
+// different duplicate-when-odd cascade depths within a capacity-32 subtree.
+func TestRootHashPadded_MatchesFlatTreeForNonPowerOfTwoFinal(t *testing.T) {
+	const subtreeSize = 32
+
+	rValues := []int{1, 2, 3, 5, 6, 7, 9, 11, 13, 15, 17, 21, 23, 27, 31}
+
+	for _, r := range rValues {
+		t.Run(fmt.Sprintf("final_subtree_has_%d_leaves", r), func(t *testing.T) {
+			totalTxs := subtreeSize + r
+
+			txHashes := make([]chainhash.Hash, totalTxs)
+			for i := range txHashes {
+				txHashes[i] = chainhash.HashH([]byte{byte(i), byte(i >> 8)})
+			}
+
+			reference, err := NewIncompleteTreeByLeafCount(totalTxs)
+			require.NoError(t, err)
+			for _, h := range txHashes {
+				require.NoError(t, reference.AddNode(h, 0, 0))
+			}
+			referenceRoot := reference.RootHash()
+			require.NotNil(t, referenceRoot)
+
+			left, err := NewTreeByLeafCount(subtreeSize)
+			require.NoError(t, err)
+			for i := range subtreeSize {
+				require.NoError(t, left.AddNode(txHashes[i], 0, 0))
+			}
+
+			right, err := NewIncompleteTreeByLeafCount(r)
+			require.NoError(t, err)
+			for i := subtreeSize; i < totalTxs; i++ {
+				require.NoError(t, right.AddNode(txHashes[i], 0, 0))
+			}
+			require.Equal(t, r, right.Length())
+
+			rightLifted, err := right.RootHashPadded(left.Height)
+			require.NoError(t, err)
+
+			top, err := NewTreeByLeafCount(2)
+			require.NoError(t, err)
+			require.NoError(t, top.AddNode(*left.RootHash(), 0, 0))
+			require.NoError(t, top.AddNode(*rightLifted, 0, 0))
+
+			require.Equal(t, referenceRoot.String(), top.RootHash().String(),
+				"composed root must equal canonical flat root for r=%d", r)
+		})
+	}
 }
