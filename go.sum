@@ -1,11 +1,11 @@
-github.com/bsv-blockchain/go-bt/v2 v2.6.6 h1:r16tbln9YchbY3GMstEnl6rBCr9edIVKj6i7YwTAHac=
-github.com/bsv-blockchain/go-bt/v2 v2.6.6/go.mod h1:kBY9YQjLGdaLPCiYR9louP7/NKsg5sqq8mjifGYUZUU=
+github.com/bsv-blockchain/go-bt/v2 v2.6.7 h1:PrtzDw38VcwM8cnpuxaj0/J5+ZsUsaxdUDD5VeS+mD8=
+github.com/bsv-blockchain/go-bt/v2 v2.6.7/go.mod h1:vv8YoWugxOwZvPAqmNoMwQmhvH6kKUMNTdJhdUv/bak=
 github.com/bsv-blockchain/go-safe-conversion v1.2.0 h1:HwLWaxqm2OyU5/2BRQ8kwdn25QyX2HXr0JkfSyTG3DU=
 github.com/bsv-blockchain/go-safe-conversion v1.2.0/go.mod h1:62Eq2980j4BygfqJhd/ObGRHET8ubEy2rBdGi4k6nsw=
 github.com/bsv-blockchain/go-sdk v1.2.24 h1:lUUcOQirAmmnJfUOQtNIWy0fVGBgSdisLOstouCvrGg=
 github.com/bsv-blockchain/go-sdk v1.2.24/go.mod h1:yTDARQK2SJBod2w+10/Rtu5VdyBFn7gkOwNbnI2zplg=
-github.com/bsv-blockchain/go-tx-map v1.3.8 h1:goWehVkn1olwTUR/jaXKwZNBBRl2lpbPMpaKskIJ0so=
-github.com/bsv-blockchain/go-tx-map v1.3.8/go.mod h1:enodDhmApAUlrpg4VAqsk+g54S1bkOaYSNu0Y+ZrqIY=
+github.com/bsv-blockchain/go-tx-map v1.3.9 h1:Rk/GLXj/Fs1lYcXGLW3yn8mQ110O1NP/rBtb3J49Vcs=
+github.com/bsv-blockchain/go-tx-map v1.3.9/go.mod h1:0k6O94B3SiWhqu8g8JYWMEHRX1tiHsmKQKi7aATcJuM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dolthub/maphash v0.1.0 h1:bsQ7JsF4FkkWyrP3oCnFJgrCUAFbFf3kOl4L/QxPDyQ=
@@ -26,8 +26,8 @@ github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0t
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-golang.org/x/crypto v0.52.0 h1:RMs7fP2rXdep0CftQlK8Uf+kibLm7qkCcradZWYz988=
-golang.org/x/crypto v0.52.0/go.mod h1:1QgfPxDqh0T2M/elOJtp9RvuR95kVjir0e6/BvEmGbc=
+golang.org/x/crypto v0.53.0 h1:QZ4Muo8THX6CizN2vPPd5fBGHyogrdK9fG4wLPFUsto=
+golang.org/x/crypto v0.53.0/go.mod h1:DNLU434OwVakk9PzuwV8w62mAJpRJL3vsgcfp4Qnsio=
 google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
 google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
