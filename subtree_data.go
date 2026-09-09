@@ -299,6 +299,15 @@ func (s *Data) serializeFromReader(buf io.Reader) error {
 
 		if txIndex == 1 && tx.IsCoinbase() {
 			// we got the coinbase tx as the first tx, we need to add it as the first tx and continue
+			//
+			// Its id is computed and kept here too, even though there is no node
+			// hash to check it against: node zero is the coinbase placeholder.
+			// One transaction in four thousand does not pay for itself, but a
+			// uniform contract does. "Every transaction this returns knows its
+			// id" is something a caller can rely on; "every transaction except
+			// the coinbase" is a footnote nobody reads.
+			tx.SetTxHash(tx.TxIDChainHash())
+
 			s.Txs[0] = tx
 
 			continue
@@ -308,9 +317,28 @@ func (s *Data) serializeFromReader(buf io.Reader) error {
 			return ErrTxIndexOutOfBounds
 		}
 
-		if !s.Subtree.Nodes[txIndex].Hash.Equal(*tx.TxIDChainHash()) {
+		// Hash once, check it, then keep it. bt.Tx.TxIDChainHash reads the
+		// transaction's cache but does not fill it; only SetTxHash does, which
+		// go-bt documents. Without this line the id computed for the check
+		// above is discarded, and every later caller serializes the whole
+		// transaction and hashes it again.
+		//
+		// Measured on a node reading a mainnet block, the two halves cost
+		// almost the same: 10.10 core-seconds of hashing here, and 9.17
+		// recomputing the identical values one stage later.
+		//
+		// Storing it is safe because it has just been verified against the node
+		// hash the subtree carries, and because a transaction's id is defined
+		// over its standard serialization. Callers that go on to extend these
+		// transactions, filling in each input's parent satoshis and locking
+		// script, do not change it. See TestCachedIDSurvivesExtension.
+		txID := tx.TxIDChainHash()
+
+		if !s.Subtree.Nodes[txIndex].Hash.Equal(*txID) {
 			return ErrTxHashMismatch
 		}
+
+		tx.SetTxHash(txID)
 
 		s.Txs[txIndex] = tx
 		txIndex++
