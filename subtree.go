@@ -17,6 +17,25 @@ import (
 	txmap "github.com/bsv-blockchain/go-tx-map"
 )
 
+// Serialized subtree layout, used by the seeking trailer reader:
+//
+//	rootHash(32) | fees(8) | sizeInBytes(8) | numNodes(8) |
+//	numNodes x [ hash(32) | fee(8) | size(8) ] |
+//	numConflicting(8) | numConflicting x hash(32)
+const (
+	// rootHashPlusFeesPlusSizeLen is everything preceding the node count.
+	rootHashPlusFeesPlusSizeLen = chainhash.HashSize + 8 + 8
+
+	// nodeSerializedLen is the on-disk size of one Node.
+	nodeSerializedLen = chainhash.HashSize + 8 + 8
+
+	// conflictingNodesPrealloc caps how much is reserved up front for the
+	// trailer, so a corrupt or hostile count cannot drive a large allocation
+	// before any hash has actually been read. Conflicting nodes are rare and
+	// few; the slice grows if a subtree genuinely has more.
+	conflictingNodesPrealloc = 64
+)
+
 // Node represents a node in the subtree.
 type Node struct {
 	Hash        chainhash.Hash `json:"txid"` // This is called txid so that the UI knows to add a link to /tx/<txid>
@@ -1009,12 +1028,32 @@ func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 }
 
 // DeserializeSubtreeConflictingFromReader deserializes the conflicting nodes from the provided reader.
+//
+// The conflicting-node list is a trailer: it sits after the node array, which
+// occupies 48 bytes per node. Recovering it by reading forward therefore costs
+// the whole serialized subtree — roughly 48MB for a million-node subtree — to
+// obtain a handful of 32-byte hashes, none of the skipped bytes being used.
+//
+// When the reader can seek, the node array is skipped outright and the cost
+// falls to a few seeks and a few tens of bytes. Callers reading from a file (or
+// anything else exposing io.Seeker) get this automatically; everything else
+// keeps the original streaming behaviour.
 func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes []chainhash.Hash, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("recovered in DeserializeSubtreeConflictingFromReader: %w: %v", err, r)
 		}
 	}()
+
+	if seeker, ok := reader.(io.Seeker); ok {
+		// Probe before consuming anything. A wrapper can satisfy io.Seeker and
+		// still refuse at runtime when the thing it wraps is a network stream,
+		// and discovering that mid-parse would leave the offset indeterminate
+		// with no way to fall back.
+		if _, probeErr := seeker.Seek(0, io.SeekCurrent); probeErr == nil {
+			return deserializeSubtreeConflictingBySeeking(seeker)
+		}
+	}
 
 	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
 
@@ -1052,6 +1091,73 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 		if _, err = io.ReadFull(buf, conflictingNodes[i][:]); err != nil {
 			return nil, fmt.Errorf("unable to read conflicting node: %w", err)
 		}
+	}
+
+	return conflictingNodes, nil
+}
+
+// deserializeSubtreeConflictingBySeeking reads the conflicting-node trailer
+// without touching the node array, for readers that support seeking.
+//
+// Offsets are relative (io.SeekCurrent) rather than absolute, because the reader
+// is not necessarily positioned at the start of the underlying stream — blob
+// stores hand back a reader already advanced past their own file header.
+func deserializeSubtreeConflictingBySeeking(seeker io.Seeker) ([]chainhash.Hash, error) {
+	reader, ok := seeker.(io.Reader)
+	if !ok {
+		return nil, fmt.Errorf("seeker does not implement io.Reader")
+	}
+
+	// skip root hash (32) + fees (8) + sizeInBytes (8)
+	if _, err := seeker.Seek(rootHashPlusFeesPlusSizeLen, io.SeekCurrent); err != nil {
+		return nil, fmt.Errorf("unable to seek past subtree header: %w", err)
+	}
+
+	bytes8 := make([]byte, 8)
+
+	if _, err := io.ReadFull(reader, bytes8); err != nil {
+		return nil, fmt.Errorf("unable to read number of leaves: %w", err)
+	}
+
+	numLeaves := binary.LittleEndian.Uint64(bytes8)
+
+	// A corrupt or hostile length must not be turned into a wild seek offset.
+	// numLeaves*nodeSerializedLen has to stay inside int64, which also keeps the
+	// multiplication itself from wrapping.
+	if numLeaves > uint64(math.MaxInt64)/nodeSerializedLen {
+		return nil, fmt.Errorf("number of leaves %d is out of range", numLeaves)
+	}
+
+	if _, err := seeker.Seek(int64(numLeaves)*nodeSerializedLen, io.SeekCurrent); err != nil {
+		return nil, fmt.Errorf("unable to seek past subtree nodes: %w", err)
+	}
+
+	if _, err := io.ReadFull(reader, bytes8); err != nil {
+		return nil, fmt.Errorf("unable to read number of conflicting nodes: %w", err)
+	}
+
+	numConflictingLeaves := binary.LittleEndian.Uint64(bytes8)
+
+	numConflictingLeavesInt, err := safe.Uint64ToInt(numConflictingLeaves)
+	if err != nil {
+		return nil, err
+	}
+
+	// Seeking past the end of a file succeeds, so an overstated count is only
+	// caught when the reads below come up short. io.ReadFull reports that as
+	// ErrUnexpectedEOF, which is the error the caller wants either way; the
+	// slice is grown as hashes arrive rather than preallocated to the claimed
+	// size, so a bogus count cannot be used to force a large allocation.
+	conflictingNodes := make([]chainhash.Hash, 0, min(numConflictingLeavesInt, conflictingNodesPrealloc))
+
+	for i := 0; i < numConflictingLeavesInt; i++ {
+		var hash chainhash.Hash
+
+		if _, err = io.ReadFull(reader, hash[:]); err != nil {
+			return nil, fmt.Errorf("unable to read conflicting node: %w", err)
+		}
+
+		conflictingNodes = append(conflictingNodes, hash)
 	}
 
 	return conflictingNodes, nil
