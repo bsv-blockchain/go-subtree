@@ -42,3 +42,6 @@ testdata
 
 # Node modules
 node_modules/
+
+# Local worktrees
+.worktrees/
