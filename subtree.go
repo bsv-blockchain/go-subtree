@@ -1076,13 +1076,16 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 		return nil, err
 	}
 
-	// The byte count must be range-checked before it is computed, not after:
-	// safe.Uint64ToInt only rejects values above MaxInt, so the multiplication
-	// below still wraps for a large count, and a wrapped (negative) skip makes
-	// bufio.Discard fail while parsing continues from the wrong offset — turning
-	// a corrupt file into plausible-looking garbage rather than an error. The
-	// seeking path applies the same bound, so both paths reject the same inputs.
-	if numLeaves > uint64(math.MaxInt64)/nodeSerializedLen {
+	// The byte count must be range-checked before it is computed, not after.
+	// The skip below is computed in platform-sized int (nodeSerializedLen *
+	// numLeavesInt), so the bound must be MaxInt, not MaxInt64: safe.Uint64ToInt
+	// only rejects values above MaxInt, so on a 32-bit build a larger count
+	// passes that conversion yet overflows the multiplication, and a wrapped skip
+	// either makes bufio.Discard fail or reads the trailer from the wrong offset
+	// — turning a corrupt file into plausible-looking garbage rather than an
+	// error. The seeking path multiplies in int64 and bounds by MaxInt64 for the
+	// same reason, so both paths reject counts that would overflow their own math.
+	if numLeaves > uint64(math.MaxInt)/nodeSerializedLen {
 		return nil, fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
 	}
 
@@ -1099,6 +1102,15 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 	}
 
 	numConflictingLeaves := binary.LittleEndian.Uint64(bytes8)
+
+	// A well-formed subtree never lists more conflicting nodes than leaves:
+	// AddConflictingNode only accepts a hash already present in the subtree and
+	// deduplicates it, so len(ConflictingNodes) <= len(Nodes). Enforcing that
+	// here rejects a hostile count after the two length words instead of reading
+	// a bogus conflicting array. The seeking path applies the same bound.
+	if numConflictingLeaves > numLeaves {
+		return nil, fmt.Errorf("%w: %d > %d", ErrConflictingCountExceedsLeaves, numConflictingLeaves, numLeaves)
+	}
 
 	numConflictingLeavesInt, err := safe.Uint64ToInt(numConflictingLeaves)
 	if err != nil {
@@ -1165,6 +1177,12 @@ func deserializeSubtreeConflictingBySeeking(seeker io.Seeker) ([]chainhash.Hash,
 	}
 
 	numConflictingLeaves := binary.LittleEndian.Uint64(bytes8)
+
+	// A well-formed subtree never lists more conflicting nodes than leaves (see
+	// the streaming path), so reject that relation before allocating or reading.
+	if numConflictingLeaves > numLeaves {
+		return nil, fmt.Errorf("%w: %d > %d", ErrConflictingCountExceedsLeaves, numConflictingLeaves, numLeaves)
+	}
 
 	numConflictingLeavesInt, err := safe.Uint64ToInt(numConflictingLeaves)
 	if err != nil {

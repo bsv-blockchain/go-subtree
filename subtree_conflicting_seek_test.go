@@ -196,3 +196,93 @@ func TestDeserializeSubtreeConflictingFromReader_HostileCountsAgree(t *testing.T
 		})
 	}
 }
+
+// conflictingCountOffset returns the byte offset of the conflicting-count word
+// for a subtree serialized with numNodes leaves: it sits immediately after the
+// header, the leaf-count word, and the node array.
+func conflictingCountOffset(numNodes int) int {
+	return rootHashPlusFeesPlusSizeLen + 8 + numNodes*nodeSerializedLen
+}
+
+// TestDeserializeSubtreeConflictingFromReader_ConflictingExceedsLeaves pins the
+// invariant that a trailer may not claim more conflicting nodes than the subtree
+// has leaves. AddConflictingNode only accepts a hash already present in the
+// subtree and deduplicates it, so a well-formed subtree always satisfies
+// len(ConflictingNodes) <= len(Nodes). A larger count is malformed; both paths
+// must reject it up front by the invariant rather than reading a bogus array or,
+// in the seeking case, being driven into work sized by the attacker's count.
+func TestDeserializeSubtreeConflictingFromReader_ConflictingExceedsLeaves(t *testing.T) {
+	const numNodes = 8
+
+	serialized, _ := buildSubtreeWithConflicting(t, numNodes, 2)
+
+	tests := []struct {
+		name  string
+		count uint64
+	}{
+		{name: "one over the leaf count", count: numNodes + 1},
+		{name: "an allocation-sized count", count: 1 << 35},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			corrupted := make([]byte, len(serialized))
+			copy(corrupted, serialized)
+			binary.LittleEndian.PutUint64(corrupted[conflictingCountOffset(numNodes):], tt.count)
+
+			_, seekErr := DeserializeSubtreeConflictingFromReader(bytes.NewReader(corrupted))
+			_, streamErr := DeserializeSubtreeConflictingFromReader(nonSeekableReader{r: bytes.NewReader(corrupted)})
+
+			require.ErrorIs(t, seekErr, ErrConflictingCountExceedsLeaves, "seeking path must reject a count above the leaf count")
+			require.ErrorIs(t, streamErr, ErrConflictingCountExceedsLeaves, "streaming path must reject a count above the leaf count")
+		})
+	}
+}
+
+// TestDeserializeSubtreeConflictingFromReader_ConflictingEqualsLeaves pins the
+// boundary: a count equal to the leaf count is permitted by the invariant (the
+// check is strictly greater-than, not >=), so a file that claims it must fail
+// only because the promised hashes are not present — never with the invariant
+// error. This guards against tightening the comparison to >= and rejecting a
+// theoretically valid subtree.
+func TestDeserializeSubtreeConflictingFromReader_ConflictingEqualsLeaves(t *testing.T) {
+	const numNodes = 8
+
+	// The helper caps conflicting at numNodes-1, so the physical trailer holds
+	// fewer hashes than the mutated count promises; the read runs short.
+	serialized, _ := buildSubtreeWithConflicting(t, numNodes, numNodes-1)
+
+	corrupted := make([]byte, len(serialized))
+	copy(corrupted, serialized)
+	binary.LittleEndian.PutUint64(corrupted[conflictingCountOffset(numNodes):], numNodes)
+
+	_, seekErr := DeserializeSubtreeConflictingFromReader(bytes.NewReader(corrupted))
+	_, streamErr := DeserializeSubtreeConflictingFromReader(nonSeekableReader{r: bytes.NewReader(corrupted)})
+
+	require.Error(t, seekErr)
+	require.Error(t, streamErr)
+	require.NotErrorIs(t, seekErr, ErrConflictingCountExceedsLeaves, "count == leaves must not trip the invariant")
+	require.NotErrorIs(t, streamErr, ErrConflictingCountExceedsLeaves, "count == leaves must not trip the invariant")
+}
+
+// TestDeserializeSubtreeConflictingFromReader_LeafCountOverflowsIntMultiply pins
+// the streaming path's overflow guard. That path skips the node array with
+// bufio.Discard(nodeSerializedLen * numLeavesInt), a product computed in
+// platform-sized int, so the guard must reject at MaxInt/nodeSerializedLen — not
+// MaxInt64. On a 32-bit build the two differ by orders of magnitude: a count
+// just past this boundary passes safe.Uint64ToInt yet overflows the
+// multiplication, which a MaxInt64 bound would have waved through. The value is
+// well below MaxInt64/nodeSerializedLen, so a regression to that looser bound
+// fails this test on every architecture.
+func TestDeserializeSubtreeConflictingFromReader_LeafCountOverflowsIntMultiply(t *testing.T) {
+	serialized, _ := buildSubtreeWithConflicting(t, 8, 2)
+
+	corrupted := make([]byte, len(serialized))
+	copy(corrupted, serialized)
+
+	overflowing := uint64(math.MaxInt)/nodeSerializedLen + 1
+	binary.LittleEndian.PutUint64(corrupted[rootHashPlusFeesPlusSizeLen:], overflowing)
+
+	_, streamErr := DeserializeSubtreeConflictingFromReader(nonSeekableReader{r: bytes.NewReader(corrupted)})
+	require.ErrorIs(t, streamErr, ErrNumLeavesOutOfRange, "streaming path must reject a leaf count that overflows the int byte-length computation")
+}

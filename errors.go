@@ -84,6 +84,11 @@ var (
 	// overflow the byte offsets computed from it
 	ErrNumLeavesOutOfRange = errors.New("number of leaves is out of range")
 
+	// ErrConflictingCountExceedsLeaves is returned when a serialized subtree
+	// claims more conflicting nodes than it has leaves, which no well-formed
+	// subtree can, since conflicting nodes are a deduplicated subset of the leaves
+	ErrConflictingCountExceedsLeaves = errors.New("conflicting node count exceeds number of leaves")
+
 	// ErrSeekerNotReader is returned when an io.Seeker does not also implement io.Reader
 	ErrSeekerNotReader = errors.New("seeker does not implement io.Reader")
 )
