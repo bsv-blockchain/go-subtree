@@ -27,7 +27,7 @@ func (f refusingSeeker) Seek(int64, int) (int64, error) {
 	return 0, io.ErrUnexpectedEOF
 }
 
-func buildSubtreeWithConflicting(t *testing.T, numNodes int, numConflicting int) ([]byte, []chainhash.Hash) {
+func buildSubtreeWithConflicting(t *testing.T, numNodes, numConflicting int) ([]byte, []chainhash.Hash) {
 	t.Helper()
 
 	st, err := NewIncompleteTreeByLeafCount(numNodes)
@@ -89,7 +89,7 @@ func TestDeserializeSubtreeConflictingFromReader_SeekAndStreamAgree(t *testing.T
 			require.NoError(t, err)
 
 			require.Equal(t, expected, seeked, "seeking path returned the wrong conflicting nodes")
-			require.Equal(t, len(expected), len(streamed))
+			require.Len(t, streamed, len(expected))
 			require.Equal(t, seeked, streamed, "seeking and streaming paths must agree")
 		})
 	}
