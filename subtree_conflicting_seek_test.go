@@ -2,7 +2,9 @@ package subtree
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
+	"math"
 	"testing"
 
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
@@ -133,4 +135,64 @@ func TestDeserializeSubtreeConflictingFromReader_TruncatedTrailer(t *testing.T) 
 
 	_, err := DeserializeSubtreeConflictingFromReader(bytes.NewReader(truncated))
 	require.Error(t, err)
+}
+
+// TestDeserializeSubtreeConflictingFromReader_HostileCountsAgree pins the
+// equivalence property on inputs an attacker controls, which the benign-input
+// test above does not reach.
+//
+// Subtree bytes arrive from peers, and which of the two paths runs depends on
+// whether the blob backend hands back a seekable reader. If the paths disagreed
+// on a malformed file, a node's view of which transactions are conflicting would
+// depend on its storage backend — the exact divergence this parser must not
+// introduce.
+func TestDeserializeSubtreeConflictingFromReader_HostileCountsAgree(t *testing.T) {
+	serialized, _ := buildSubtreeWithConflicting(t, 8, 2)
+
+	// Offsets within the header: rootHash(32) | fees(8) | sizeInBytes(8) | numNodes(8)
+	const numNodesOffset = rootHashPlusFeesPlusSizeLen
+
+	tests := []struct {
+		name   string
+		mutate func([]byte)
+	}{
+		{
+			name: "node count overflows the byte-length computation",
+			mutate: func(b []byte) {
+				binary.LittleEndian.PutUint64(b[numNodesOffset:], math.MaxUint64)
+			},
+		},
+		{
+			name: "node count is large but below the overflow bound",
+			mutate: func(b []byte) {
+				binary.LittleEndian.PutUint64(b[numNodesOffset:], 1<<40)
+			},
+		},
+		{
+			name: "conflicting count demands a huge allocation",
+			mutate: func(b []byte) {
+				// trailer count sits after the node array
+				off := numNodesOffset + 8 + 8*nodeSerializedLen
+				binary.LittleEndian.PutUint64(b[off:], 1<<35)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			corrupted := make([]byte, len(serialized))
+			copy(corrupted, serialized)
+			tt.mutate(corrupted)
+
+			seeked, seekErr := DeserializeSubtreeConflictingFromReader(bytes.NewReader(corrupted))
+			streamed, streamErr := DeserializeSubtreeConflictingFromReader(nonSeekableReader{r: bytes.NewReader(corrupted)})
+
+			// Neither path may return a plausible-looking result for bytes the
+			// other rejects, and neither may be driven into a huge allocation.
+			require.Error(t, seekErr, "seeking path must reject malformed input")
+			require.Error(t, streamErr, "streaming path must reject malformed input")
+			require.Nil(t, seeked)
+			require.Nil(t, streamed)
+		})
+	}
 }

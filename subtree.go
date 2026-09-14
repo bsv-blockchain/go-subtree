@@ -1076,7 +1076,22 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 		return nil, err
 	}
 
-	_, _ = buf.Discard(48 * numLeavesInt)
+	// The byte count must be range-checked before it is computed, not after:
+	// safe.Uint64ToInt only rejects values above MaxInt, so the multiplication
+	// below still wraps for a large count, and a wrapped (negative) skip makes
+	// bufio.Discard fail while parsing continues from the wrong offset — turning
+	// a corrupt file into plausible-looking garbage rather than an error. The
+	// seeking path applies the same bound, so both paths reject the same inputs.
+	if numLeaves > uint64(math.MaxInt64)/nodeSerializedLen {
+		return nil, fmt.Errorf("number of leaves %d is out of range", numLeaves)
+	}
+
+	// Discard's error is meaningful here: a short file means the node count did
+	// not match the bytes present, and continuing would read the trailer from
+	// whatever happens to follow.
+	if _, err = buf.Discard(nodeSerializedLen * numLeavesInt); err != nil {
+		return nil, fmt.Errorf("unable to skip subtree nodes: %w", err)
+	}
 
 	// read the number of conflicting nodes
 	if _, err = io.ReadFull(buf, bytes8); err != nil {
@@ -1085,12 +1100,25 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 
 	numConflictingLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	// read conflicting nodes
-	conflictingNodes = make([]chainhash.Hash, numConflictingLeaves)
-	for i := uint64(0); i < numConflictingLeaves; i++ {
-		if _, err = io.ReadFull(buf, conflictingNodes[i][:]); err != nil {
+	numConflictingLeavesInt, err := safe.Uint64ToInt(numConflictingLeaves)
+	if err != nil {
+		return nil, err
+	}
+
+	// Grow as hashes arrive rather than preallocating the claimed size. The
+	// count comes straight from the file, so trusting it lets a corrupt or
+	// hostile subtree demand an arbitrarily large allocation before a single
+	// hash has been read — the same reason the seeking path caps its prealloc.
+	conflictingNodes = make([]chainhash.Hash, 0, min(numConflictingLeavesInt, conflictingNodesPrealloc))
+
+	for i := 0; i < numConflictingLeavesInt; i++ {
+		var hash chainhash.Hash
+
+		if _, err = io.ReadFull(buf, hash[:]); err != nil {
 			return nil, fmt.Errorf("unable to read conflicting node: %w", err)
 		}
+
+		conflictingNodes = append(conflictingNodes, hash)
 	}
 
 	return conflictingNodes, nil
