@@ -79,6 +79,13 @@ var (
 
 	// ErrTransactionRead is returned when reading a transaction fails
 	ErrTransactionRead = errors.New("error reading transaction")
+
+	// ErrNumLeavesOutOfRange is returned when a serialized leaf count would
+	// overflow the byte offsets computed from it
+	ErrNumLeavesOutOfRange = errors.New("number of leaves is out of range")
+
+	// ErrSeekerNotReader is returned when an io.Seeker does not also implement io.Reader
+	ErrSeekerNotReader = errors.New("seeker does not implement io.Reader")
 )
 
 // Mmap errors
