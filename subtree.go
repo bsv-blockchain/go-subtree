@@ -1083,7 +1083,7 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 	// a corrupt file into plausible-looking garbage rather than an error. The
 	// seeking path applies the same bound, so both paths reject the same inputs.
 	if numLeaves > uint64(math.MaxInt64)/nodeSerializedLen {
-		return nil, fmt.Errorf("number of leaves %d is out of range", numLeaves)
+		return nil, fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
 	}
 
 	// Discard's error is meaningful here: a short file means the node count did
@@ -1133,7 +1133,7 @@ func DeserializeSubtreeConflictingFromReader(reader io.Reader) (conflictingNodes
 func deserializeSubtreeConflictingBySeeking(seeker io.Seeker) ([]chainhash.Hash, error) {
 	reader, ok := seeker.(io.Reader)
 	if !ok {
-		return nil, fmt.Errorf("seeker does not implement io.Reader")
+		return nil, ErrSeekerNotReader
 	}
 
 	// skip root hash (32) + fees (8) + sizeInBytes (8)
@@ -1153,7 +1153,7 @@ func deserializeSubtreeConflictingBySeeking(seeker io.Seeker) ([]chainhash.Hash,
 	// numLeaves*nodeSerializedLen has to stay inside int64, which also keeps the
 	// multiplication itself from wrapping.
 	if numLeaves > uint64(math.MaxInt64)/nodeSerializedLen {
-		return nil, fmt.Errorf("number of leaves %d is out of range", numLeaves)
+		return nil, fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
 	}
 
 	if _, err := seeker.Seek(int64(numLeaves)*nodeSerializedLen, io.SeekCurrent); err != nil {
