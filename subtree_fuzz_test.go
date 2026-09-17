@@ -11,10 +11,12 @@ import (
 // bytes, however malformed, may escape the mmap loader as a panic. A returned
 // error or a valid subtree is fine; a panic is the process crash the audit found.
 //
-// Inputs whose declared count would map a huge (sparse) scratch file are skipped:
-// they exercise the OS allocator rather than this parser and slow the fuzzer to a
-// crawl. The bound and overflow handling for large counts are covered exhaustively
-// by the table tests in mmap_store_test.go instead.
+// The fuzz input is wrapped in a seekable bytes.Reader, so deserializeFromReaderMmap
+// rejects any declared count exceeding len(data)/nodeSerializedLen in O(1) via
+// ErrNodeCountExceedsInput before mapping a scratch file — the mapped size can never
+// exceed the fuzz input length. No declared-count guard is therefore needed here, and
+// the two S-1 regression seeds (the audit count and math.MaxUint64) exercise that
+// input bound directly instead of being discarded before the loader ever runs.
 func FuzzNewSubtreeFromReaderMmap(f *testing.F) {
 	auditHeader := make([]byte, numLeavesOffset+8)
 	binary.LittleEndian.PutUint64(auditHeader[numLeavesOffset:], auditHostileCount)
@@ -28,12 +30,6 @@ func FuzzNewSubtreeFromReaderMmap(f *testing.F) {
 	f.Add(make([]byte, numLeavesOffset+8)) // count == 0
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		if len(data) >= numLeavesOffset+8 {
-			if count := binary.LittleEndian.Uint64(data[numLeavesOffset:]); count > 4096 {
-				return
-			}
-		}
-
 		st, err := NewSubtreeFromReaderMmap(bytes.NewReader(data), t.TempDir())
 		if err == nil && st != nil {
 			_ = st.Close()

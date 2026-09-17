@@ -265,6 +265,49 @@ func TestDeserializeSubtreeConflictingFromReader_ConflictingEqualsLeaves(t *test
 	require.NotErrorIs(t, streamErr, ErrConflictingCountExceedsLeaves, "count == leaves must not trip the invariant")
 }
 
+// TestNewSubtreeFromReader_HostileConflictingCount pins that the shared trailer
+// reader is bounded on the heap path too, not just the mmap path. deserializeConflictingNodes
+// is reached from DeserializeFromReader (heap) and deserializeFromReaderMmap alike;
+// a count above the leaf total must fail with ErrConflictingCountExceedsLeaves before
+// it sizes any allocation. This also guards the constructor's error contract: a
+// recovered panic must surface as a non-nil error, never as a nil subtree with a nil
+// error. Before the bound, 1<<62 reached makeslice and an allocation-sized count could
+// OOM-kill the worker.
+func TestNewSubtreeFromReader_HostileConflictingCount(t *testing.T) {
+	const numNodes = 8
+
+	valid, _ := buildSubtreeWithConflicting(t, numNodes, 2)
+
+	tests := []struct {
+		name  string
+		count uint64
+	}{
+		{name: "one over the leaf count", count: numNodes + 1},
+		{name: "makeslice-panic sized", count: 1 << 62},
+		{name: "allocation sized", count: 1 << 31},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			corrupted := make([]byte, len(valid))
+			copy(corrupted, valid)
+			binary.LittleEndian.PutUint64(corrupted[conflictingCountOffset(numNodes):], tt.count)
+
+			var (
+				st  *Subtree
+				err error
+			)
+
+			require.NotPanics(t, func() {
+				st, err = NewSubtreeFromReader(bytes.NewReader(corrupted))
+			})
+
+			require.ErrorIs(t, err, ErrConflictingCountExceedsLeaves)
+			require.Nil(t, st, "a rejected load must return a nil subtree with a non-nil error, never (nil, nil)")
+		})
+	}
+}
+
 // TestDeserializeSubtreeConflictingFromReader_LeafCountOverflowsIntMultiply pins
 // the streaming path's overflow guard. That path skips the node array with
 // bufio.Discard(nodeSerializedLen * numLeavesInt), a product computed in

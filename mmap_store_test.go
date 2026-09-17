@@ -61,6 +61,23 @@ func (s unrecoverableSeeker) Seek(_ int64, whence int) (int64, error) {
 	return 0, io.ErrUnexpectedEOF // SeekEnd, and the restore that follows, both fail
 }
 
+// zeroEndSeeker is an io.ReadSeeker whose SeekEnd reports length 0 without moving
+// the underlying reader — the shape of a streaming / object-store wrapper whose
+// length is not known until the body is read. maxNodesInReader must treat this as
+// "size unknown" and fall back to the practical ceiling, not as an authoritative
+// zero-node bound that would reject every well-formed subtree.
+type zeroEndSeeker struct{ r *bytes.Reader }
+
+func (s zeroEndSeeker) Read(p []byte) (int, error) { return s.r.Read(p) }
+
+func (s zeroEndSeeker) Seek(offset int64, whence int) (int64, error) {
+	if whence == io.SeekEnd {
+		return 0, nil // report empty without disturbing the read position
+	}
+
+	return s.r.Seek(offset, whence)
+}
+
 // TestNewFileBackedMmapNodes_RejectsHostileCapacity pins that a capacity which
 // cannot be mapped is rejected as an ordinary error — never as a panic, and never
 // via the belt-and-braces recover (asserting the specific sentinel proves the
@@ -330,6 +347,87 @@ func TestNewSubtreeFromReaderMmap_ValidRoundTrip(t *testing.T) {
 			reSerialized, err := st.Serialize()
 			require.NoError(t, err)
 			require.Equal(t, serialized, reSerialized)
+		})
+	}
+}
+
+// TestNewSubtreeFromReaderMmap_SeekableReportsZeroLength pins that a seekable
+// wrapper whose SeekEnd reports 0 (streaming / object-store shapes whose length is
+// not known until the body is read) does not have its well-formed subtree rejected.
+// Treating that probe as an authoritative zero-node bound would fail every load with
+// ErrNodeCountExceedsInput; instead the loader must fall back to the practical
+// ceiling and parse normally, still re-serializing byte for byte.
+func TestNewSubtreeFromReaderMmap_SeekableReportsZeroLength(t *testing.T) {
+	skipIfMmapUnsupported(t)
+
+	dir := t.TempDir()
+
+	valid, _ := buildSubtreeWithConflicting(t, 8, 2)
+
+	var (
+		st  *Subtree
+		err error
+	)
+
+	require.NotPanics(t, func() {
+		st, err = NewSubtreeFromReaderMmap(zeroEndSeeker{r: bytes.NewReader(valid)}, dir)
+	})
+
+	require.NoError(t, err, "a wrapper reporting zero length must not trip the input bound")
+	require.NotNil(t, st)
+
+	defer func() { require.NoError(t, st.Close()) }()
+
+	require.Equal(t, 8, st.Length())
+
+	reSerialized, err := st.Serialize()
+	require.NoError(t, err)
+	require.Equal(t, valid, reSerialized)
+}
+
+// TestNewSubtreeFromReaderMmap_HostileConflictingCount pins that a hostile
+// conflicting-node trailer count is rejected as an ordinary error, never as a panic
+// or an OOM. The node array is well-formed, so the loader maps and reads it, then
+// reaches the trailer: a count above the leaf total must fail with
+// ErrConflictingCountExceedsLeaves before any allocation is sized by it. Before the
+// bound, 1<<62 panicked in makeslice (surfacing only as the recover's ErrMmapPanic)
+// and an allocation-sized count could OOM-kill the worker.
+func TestNewSubtreeFromReaderMmap_HostileConflictingCount(t *testing.T) {
+	skipIfMmapUnsupported(t)
+
+	const numNodes = 16
+
+	valid, _ := buildSubtreeWithConflicting(t, numNodes, 2)
+
+	tests := []struct {
+		name  string
+		count uint64
+	}{
+		{name: "one over the leaf count", count: numNodes + 1},
+		{name: "makeslice-panic sized", count: 1 << 62},
+		{name: "allocation sized", count: 1 << 31},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			corrupted := make([]byte, len(valid))
+			copy(corrupted, valid)
+			binary.LittleEndian.PutUint64(corrupted[conflictingCountOffset(numNodes):], tt.count)
+
+			var (
+				st  *Subtree
+				err error
+			)
+
+			require.NotPanics(t, func() {
+				st, err = NewSubtreeFromReaderMmap(bytes.NewReader(corrupted), dir)
+			})
+
+			require.ErrorIs(t, err, ErrConflictingCountExceedsLeaves)
+			require.Nil(t, st)
+			require.Empty(t, mmapTempFiles(t, dir), "a rejected trailer must not leave a scratch file")
 		})
 	}
 }
