@@ -3,6 +3,7 @@ package subtree
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 	"unsafe"
@@ -46,9 +47,40 @@ func (m *mmapNodeStore) Close() error {
 //
 // Returns a []Node slice backed by the mmap'd region and an io.Closer for cleanup.
 // The returned slice has len=0, cap=capacity.
-func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error) {
+//
+// capacity may originate from an untrusted persisted count, so it is validated
+// before it drives any arithmetic: capacity <= 0 is rejected, and a capacity that
+// would overflow either the mapped byte size (capacity * nodeSize) or the
+// unsafe.Slice length is rejected with ErrCapacityTooLarge. Without that bound a
+// hostile count wraps `size` to a small value, the tiny region maps successfully,
+// and the subsequent unsafe.Slice panics with "unsafe.Slice: len out of range" —
+// crashing the process. A deferred recover converts any residual unsafe panic
+// into ErrMmapPanic as a belt-and-braces measure.
+func newFileBackedMmapNodes(capacity int, dir string) (nodes []Node, closer io.Closer, err error) {
+	// store is declared here so the deferred recover can release an already-mapped
+	// region if the unsafe.Slice below ever panics despite the bound. The bound
+	// makes that unreachable in practice, but unsafe is involved, so we neither
+	// let a panic escape nor leak the mapping and backing file behind it.
+	var store *mmapNodeStore
+
+	defer func() {
+		if r := recover(); r != nil {
+			if store != nil {
+				_ = store.Close()
+			}
+			nodes, closer, err = nil, nil, fmt.Errorf("%w: %v", ErrMmapPanic, r)
+		}
+	}()
+
 	if capacity <= 0 {
 		return nil, nil, fmt.Errorf("%w: got %d", ErrCapacityNotPositive, capacity)
+	}
+
+	// capacity * nodeSize must not overflow int, and the []Node view built with
+	// unsafe.Slice (length = capacity) must not overflow uintptr in len*elemsize.
+	// math.MaxInt/nodeSize is the largest capacity that satisfies both.
+	if capacity > math.MaxInt/nodeSize {
+		return nil, nil, fmt.Errorf("%w: %d exceeds max %d", ErrCapacityTooLarge, capacity, math.MaxInt/nodeSize)
 	}
 
 	size := capacity * nodeSize
@@ -79,14 +111,16 @@ func newFileBackedMmapNodes(capacity int, dir string) ([]Node, io.Closer, error)
 	// This saves file descriptors (important at 1000+ subtrees).
 	_ = f.Close()
 
-	// Create a []Node view backed by the mmap'd memory.
-	// This is safe because Node has no pointer fields, so the GC won't scan this region.
-	nodes := unsafe.Slice((*Node)(unsafe.Pointer(&data[0])), capacity)[:0:capacity] //nolint:gosec // G103: intentional unsafe for mmap-backed Node slice
-
-	store := &mmapNodeStore{
+	// Build the cleanup handle before the unsafe.Slice so the deferred recover can
+	// unmap and remove the backing file if that call ever faults.
+	store = &mmapNodeStore{
 		data:     data,
 		filePath: filePath,
 	}
+
+	// Create a []Node view backed by the mmap'd memory.
+	// This is safe because Node has no pointer fields, so the GC won't scan this region.
+	nodes = unsafe.Slice((*Node)(unsafe.Pointer(&data[0])), capacity)[:0:capacity] //nolint:gosec // G103: intentional unsafe for mmap-backed Node slice
 
 	return nodes, store, nil
 }

@@ -97,4 +97,26 @@ var (
 var (
 	// ErrCapacityNotPositive is returned when mmap capacity is not positive
 	ErrCapacityNotPositive = errors.New("capacity must be positive")
+
+	// ErrCapacityTooLarge is returned when the requested mmap capacity would
+	// overflow the arithmetic used to map it: capacity * nodeSize (the mapped
+	// byte size) and the unsafe.Slice length. Bounded by math.MaxInt/nodeSize.
+	ErrCapacityTooLarge = errors.New("mmap capacity too large")
+
+	// ErrMmapPanic is returned when an unsafe or mmap operation panics. The
+	// panic is recovered and converted into an ordinary error rather than being
+	// allowed to escape into the caller's process.
+	ErrMmapPanic = errors.New("mmap operation panicked")
+
+	// ErrNodeCountExceedsInput is returned when a serialized subtree declares more
+	// nodes than the reader could possibly contain. It stops a hostile count from
+	// driving a huge scratch-file mmap before a single node has been read, when the
+	// reader's remaining size is knowable.
+	ErrNodeCountExceedsInput = errors.New("declared node count exceeds reader size")
+
+	// ErrNodeCountExceedsLimit is returned when a non-seekable reader declares more
+	// nodes than maxMmapDeserializeNodes. The length of such a reader cannot be
+	// known in advance, so a practical ceiling stops a hostile stream from driving
+	// a multi-terabyte mmap before any node is read.
+	ErrNodeCountExceedsLimit = errors.New("declared node count exceeds mmap deserialization limit")
 )

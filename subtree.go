@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"math/bits"
 	"sync"
@@ -34,6 +33,17 @@ const (
 	// before any hash has actually been read. Conflicting nodes are rare and
 	// few; the slice grows if a subtree genuinely has more.
 	conflictingNodesPrealloc = 64
+
+	// maxMmapDeserializeNodes caps how many nodes any reader may declare before
+	// deserializeFromReaderMmap maps a scratch file for them. A seekable reader is
+	// also bounded by its remaining length (see maxNodesInReader), but that bound
+	// trusts Seek(0, SeekEnd), which reports a file's *logical* size — a sparse or
+	// truncated file can advertise room for 1<<40 nodes while holding only a header.
+	// This ceiling stops any such count, seekable or not, from driving a
+	// multi-terabyte truncate+mmap before a single node is read. It is a
+	// resource-safety ceiling, not a protocol limit: ~256x a typical 2^20-leaf
+	// subtree (~12 GiB mapped), so it never constrains a real subtree.
+	maxMmapDeserializeNodes = 1 << 28
 )
 
 // Node represents a node in the subtree.
@@ -147,17 +157,19 @@ func NewTreeByLeafCountMmap(maxNumberOfLeaves int, dir string) (*Subtree, error)
 }
 
 // NewSubtreeFromBytes creates a new Subtree from the provided byte slice.
-func NewSubtreeFromBytes(b []byte) (*Subtree, error) {
+func NewSubtreeFromBytes(b []byte) (st *Subtree, err error) {
+	// Named returns so a recovered panic surfaces as an error rather than the zero
+	// values (nil, nil) — a nil *Subtree with a nil error would be dereferenced by a
+	// caller that checks err == nil. Matches NewSubtreeFromReaderMmap's contract.
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered in NewSubtreeFromBytes: %v\n", r)
+			st, err = nil, fmt.Errorf("recovered in NewSubtreeFromBytes: %w: %v", err, r)
 		}
 	}()
 
 	subtree := &Subtree{}
 
-	err := subtree.Deserialize(b)
-	if err != nil {
+	if err = subtree.Deserialize(b); err != nil {
 		return nil, err
 	}
 
@@ -165,16 +177,19 @@ func NewSubtreeFromBytes(b []byte) (*Subtree, error) {
 }
 
 // NewSubtreeFromReader creates a new Subtree from the provided reader.
-func NewSubtreeFromReader(reader io.Reader) (*Subtree, error) {
+func NewSubtreeFromReader(reader io.Reader) (st *Subtree, err error) {
+	// Named returns so a recovered panic surfaces as an error rather than the zero
+	// values (nil, nil) — a nil *Subtree with a nil error would be dereferenced by a
+	// caller that checks err == nil. Matches NewSubtreeFromReaderMmap's contract.
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered in NewSubtreeFromReader: %v\n", r)
+			st, err = nil, fmt.Errorf("recovered in NewSubtreeFromReader: %w: %v", err, r)
 		}
 	}()
 
 	subtree := &Subtree{}
 
-	if err := subtree.DeserializeFromReader(reader); err != nil {
+	if err = subtree.DeserializeFromReader(reader); err != nil {
 		return nil, err
 	}
 
@@ -184,10 +199,21 @@ func NewSubtreeFromReader(reader io.Reader) (*Subtree, error) {
 // NewSubtreeFromReaderMmap creates a new Subtree from the provided reader, with Nodes
 // backed by file-backed mmap in the given directory. Call Close() when done.
 // This avoids heap allocation for the Node array entirely.
-func NewSubtreeFromReaderMmap(reader io.Reader, dir string) (*Subtree, error) {
+func NewSubtreeFromReaderMmap(reader io.Reader, dir string) (st *Subtree, err error) {
 	subtree := &Subtree{}
 
-	if err := subtree.deserializeFromReaderMmap(reader, dir); err != nil {
+	// Match the panic-safety contract of the heap constructors. The count bound
+	// and the recover inside newFileBackedMmapNodes already make a panic on this
+	// path unreachable, but if one ever occurs, release any region already mapped
+	// (Close is a no-op when nothing was) and surface it as an ordinary error.
+	defer func() {
+		if r := recover(); r != nil {
+			_ = subtree.Close()
+			st, err = nil, fmt.Errorf("%w: %v", ErrMmapPanic, r)
+		}
+	}()
+
+	if err = subtree.deserializeFromReaderMmap(reader, dir); err != nil {
 		return nil, err
 	}
 
@@ -891,8 +917,91 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) error {
 	return st.DeserializeFromReaderWithAllocator(reader, nil)
 }
 
+// maxNodesInReader reports the largest number of serialized nodes that could
+// follow in reader, when reader's remaining size is knowable. The three results
+// distinguish three outcomes:
+//
+//   - (n, true, nil):  reader is seekable and holds room for at most n nodes.
+//   - (0, false, nil): reader is not seekable, or a probe failed with the position
+//     left intact, so the caller must fall back to other bounds.
+//   - (0, false, err): a seek failed and left the position unrecoverable, so
+//     continuing would parse from an arbitrary offset — a hard error, never a
+//     silent fallback.
+//
+// The probe runs before any byte is consumed and restores the reader's position.
+// io.Seeker does not promise the position is unchanged when Seek returns an error,
+// so a failed SeekEnd is followed by an explicit restore attempt; if that also
+// fails the position is unknown and the error is returned rather than swallowed.
+//
+// The bound is deliberately loose — it divides the entire remaining length
+// (header + nodes + trailer) by nodeSerializedLen — so it never rejects a
+// well-formed subtree; it only catches a count whose node array alone exceeds the
+// whole input.
+func maxNodesInReader(reader io.Reader) (uint64, bool, error) {
+	seeker, ok := reader.(io.Seeker)
+	if !ok {
+		return 0, false, nil
+	}
+
+	// Seek(0, SeekCurrent) is a query; a failure here does not move the position,
+	// so fall back cleanly (e.g. a wrapper that satisfies io.Seeker but refuses).
+	cur, err := seeker.Seek(0, io.SeekCurrent)
+	if err != nil {
+		//nolint:nilerr // a failed position query means the reader is unusable as a size probe; fall back to the non-seekable bound rather than failing the parse
+		return 0, false, nil
+	}
+
+	end, err := seeker.Seek(0, io.SeekEnd)
+	if err != nil {
+		// SeekEnd may have moved the position before failing. Try to restore it; a
+		// successful restore means we can safely fall back, a failed one means the
+		// position is unknown and parsing would read from an arbitrary offset.
+		if _, restoreErr := seeker.Seek(cur, io.SeekStart); restoreErr != nil {
+			return 0, false, fmt.Errorf("reader position unrecoverable after failed seek: %w", restoreErr)
+		}
+
+		// Position restored to the probe's start, so this is a clean "size unknown"
+		// fallback rather than the SeekEnd error to propagate.
+		return 0, false, nil
+	}
+
+	// The end offset was read; the reader now sits at EOF and must be moved back.
+	if _, err = seeker.Seek(cur, io.SeekStart); err != nil {
+		return 0, false, fmt.Errorf("reader position unrecoverable after size probe: %w", err)
+	}
+
+	if end <= cur {
+		// Size reported as empty. Some io.ReadSeeker wrappers (streaming / object-store
+		// shapes whose length isn't known until the body is read) answer SeekEnd before
+		// that length is known and report 0 here. Treating that as an authoritative
+		// zero-node bound would reject every well-formed subtree, so fall back to the
+		// practical ceiling ("size unknown") instead. This costs nothing: a genuinely
+		// empty reader still fails on the root-hash read a few lines down.
+		return 0, false, nil
+	}
+
+	// end > cur is guaranteed above, so the difference is positive; the safe
+	// conversion documents that for gosec. The error path is unreachable, but
+	// propagate it rather than swallowing if the impossible ever happens.
+	available, err := safe.Int64ToUint64(end - cur)
+	if err != nil {
+		return 0, false, err
+	}
+
+	return available / nodeSerializedLen, true, nil
+}
+
 // deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
 func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error {
+	// Probe the reader's length before consuming anything, so a hostile leaf count
+	// can be rejected before it sizes a scratch file (see the input bound below).
+	// A probe that leaves the position unrecoverable is a hard error, not a silent
+	// fallback — continuing would parse from an arbitrary offset.
+	maxNodes, haveInputLimit, probeErr := maxNodesInReader(reader)
+	if probeErr != nil {
+		return probeErr
+	}
+
 	buf := bufio.NewReaderSize(reader, 32*1024)
 
 	bytes8 := make([]byte, 8)
@@ -921,11 +1030,48 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	}
 	numLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	st.treeSize = int(numLeaves) //nolint:gosec // G115: numLeaves bounded by serialized data
+	// The leaf count comes straight from the stream. Bound it before it sizes any
+	// allocation or feeds unsafe.Slice: math.MaxInt/nodeSize is the largest count
+	// whose mmap-backed []Node view cannot overflow. newFileBackedMmapNodes
+	// enforces the same bound, but failing here first yields a clearer error and
+	// skips the wasted treeSize/Height math below.
+	if numLeaves > uint64(math.MaxInt)/uint64(nodeSize) {
+		return fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
+	}
+
+	// Reject a count that would size an unreasonable mmap before a single node is
+	// read. Two guards apply, both before any scratch file is mapped; the overflow
+	// bound above only stops the arithmetic from wrapping.
+	//
+	//  1. When the reader's length is knowable (seekable), a declared count whose
+	//     node array cannot fit in the remaining bytes is rejected — this catches a
+	//     truncated file. Such a count also means the stream ends before the declared
+	//     nodes, so the error wraps io.ErrUnexpectedEOF too: a caller matching that
+	//     sentinel keeps working (the non-seekable path surfaces it from the read
+	//     loop below), while ErrNodeCountExceedsInput names the specific reason.
+	//  2. A practical ceiling applies to every reader. Seek(0, SeekEnd) reports a
+	//     file's *logical* size, so a sparse or truncated seekable file can advertise
+	//     room for 1<<40 nodes while holding only a header — clearing guard 1 yet
+	//     driving a multi-terabyte truncate+mmap. The ceiling caps that at ~12 GiB;
+	//     it is ~256x a typical 2^20-leaf subtree, so it never rejects a real one.
+	if haveInputLimit && numLeaves > maxNodes {
+		return fmt.Errorf("%w: %d declared, reader holds at most %d: %w", ErrNodeCountExceedsInput, numLeaves, maxNodes, io.ErrUnexpectedEOF)
+	}
+
+	if numLeaves > maxMmapDeserializeNodes {
+		return fmt.Errorf("%w: %d declared, limit is %d", ErrNodeCountExceedsLimit, numLeaves, uint64(maxMmapDeserializeNodes))
+	}
+
+	numLeavesInt, err := safe.Uint64ToInt(numLeaves)
+	if err != nil {
+		return err
+	}
+
+	st.treeSize = numLeavesInt
 	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
 
 	// Allocate Nodes via mmap
-	nodes, closer, err := newFileBackedMmapNodes(int(numLeaves), dir) //nolint:gosec // G115: numLeaves bounded by serialized data
+	nodes, closer, err := newFileBackedMmapNodes(numLeavesInt, dir)
 	if err != nil {
 		return fmt.Errorf("mmap allocation for %d nodes failed: %w", numLeaves, err)
 	}
@@ -1015,13 +1161,36 @@ func (st *Subtree) deserializeConflictingNodes(buf *bufio.Reader) error {
 
 	numConflictingLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	// read conflicting nodes
-	st.ConflictingNodes = make([]chainhash.Hash, numConflictingLeaves)
+	// The count comes straight from the stream and must be bounded before it sizes
+	// any allocation. A well-formed subtree never lists more conflicting nodes than
+	// leaves — AddConflictingNode only accepts a hash already present in the subtree
+	// and deduplicates it, so len(ConflictingNodes) <= len(Nodes). Enforce that here,
+	// the same invariant DeserializeSubtreeConflictingFromReader and the seeking path
+	// already apply. Without it a hostile trailer count drives a make() that either
+	// panics (recovered as ErrMmapPanic on the mmap path) or, when merely large,
+	// OOM-kills the process before a single hash is read.
+	numLeaves := uint64(len(st.Nodes))
+	if numConflictingLeaves > numLeaves {
+		return fmt.Errorf("%w: %d > %d", ErrConflictingCountExceedsLeaves, numConflictingLeaves, numLeaves)
+	}
 
-	for i := uint64(0); i < numConflictingLeaves; i++ {
-		if _, err := io.ReadFull(buf, st.ConflictingNodes[i][:]); err != nil {
+	numConflictingLeavesInt, err := safe.Uint64ToInt(numConflictingLeaves)
+	if err != nil {
+		return err
+	}
+
+	// Grow as hashes arrive rather than preallocating the claimed size, capping the
+	// initial reservation at conflictingNodesPrealloc (matches the sibling readers).
+	st.ConflictingNodes = make([]chainhash.Hash, 0, min(numConflictingLeavesInt, conflictingNodesPrealloc))
+
+	for i := 0; i < numConflictingLeavesInt; i++ {
+		var hash chainhash.Hash
+
+		if _, err := io.ReadFull(buf, hash[:]); err != nil {
 			return fmt.Errorf("unable to read conflicting node %d: %w", i, err)
 		}
+
+		st.ConflictingNodes = append(st.ConflictingNodes, hash)
 	}
 
 	return nil
