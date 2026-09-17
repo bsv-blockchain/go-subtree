@@ -34,14 +34,15 @@ const (
 	// few; the slice grows if a subtree genuinely has more.
 	conflictingNodesPrealloc = 64
 
-	// maxMmapDeserializeNodes caps how many nodes a non-seekable reader may declare
-	// before deserializeFromReaderMmap will map a scratch file for them. A seekable
-	// reader is bounded exactly by its remaining length (see maxNodesInReader); this
-	// ceiling only applies when that length cannot be known, so a hostile network
-	// stream cannot declare a count such as 1<<40 and drive a multi-terabyte
-	// truncate+mmap before a single node is read. It is a resource-safety ceiling,
-	// not a protocol limit: ~256x a typical 2^20-leaf subtree (~12 GiB mapped), and
-	// it never constrains the seekable path that real subtrees arrive on.
+	// maxMmapDeserializeNodes caps how many nodes any reader may declare before
+	// deserializeFromReaderMmap maps a scratch file for them. A seekable reader is
+	// also bounded by its remaining length (see maxNodesInReader), but that bound
+	// trusts Seek(0, SeekEnd), which reports a file's *logical* size — a sparse or
+	// truncated file can advertise room for 1<<40 nodes while holding only a header.
+	// This ceiling stops any such count, seekable or not, from driving a
+	// multi-terabyte truncate+mmap before a single node is read. It is a
+	// resource-safety ceiling, not a protocol limit: ~256x a typical 2^20-leaf
+	// subtree (~12 GiB mapped), so it never constrains a real subtree.
 	maxMmapDeserializeNodes = 1 << 28
 )
 
@@ -1039,22 +1040,26 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	}
 
 	// Reject a count that would size an unreasonable mmap before a single node is
-	// read. The overflow bound above only stops the arithmetic from wrapping; a
-	// count like 1<<40 is well under it yet would drive a ~48 TiB truncate+mmap.
-	// A seekable reader is bounded exactly by its remaining length; a non-seekable
-	// one (network stream), whose length cannot be known, is bounded by a practical
-	// ceiling so it cannot be used to exhaust virtual address space.
+	// read. Two guards apply, both before any scratch file is mapped; the overflow
+	// bound above only stops the arithmetic from wrapping.
 	//
-	// For a seekable reader this bound is also reached by a *truncated* file
-	// (declared count larger than the bytes present), so such input now surfaces as
-	// ErrNodeCountExceedsInput here rather than as io.ErrUnexpectedEOF from the read
-	// loop below. Callers distinguishing truncation should match this sentinel too.
-	if haveInputLimit {
-		if numLeaves > maxNodes {
-			return fmt.Errorf("%w: %d declared, reader holds at most %d", ErrNodeCountExceedsInput, numLeaves, maxNodes)
-		}
-	} else if numLeaves > maxMmapDeserializeNodes {
-		return fmt.Errorf("%w: %d declared, limit is %d for a non-seekable reader", ErrNodeCountExceedsLimit, numLeaves, uint64(maxMmapDeserializeNodes))
+	//  1. When the reader's length is knowable (seekable), a declared count whose
+	//     node array cannot fit in the remaining bytes is rejected — this catches a
+	//     truncated file. Such a count also means the stream ends before the declared
+	//     nodes, so the error wraps io.ErrUnexpectedEOF too: a caller matching that
+	//     sentinel keeps working (the non-seekable path surfaces it from the read
+	//     loop below), while ErrNodeCountExceedsInput names the specific reason.
+	//  2. A practical ceiling applies to every reader. Seek(0, SeekEnd) reports a
+	//     file's *logical* size, so a sparse or truncated seekable file can advertise
+	//     room for 1<<40 nodes while holding only a header — clearing guard 1 yet
+	//     driving a multi-terabyte truncate+mmap. The ceiling caps that at ~12 GiB;
+	//     it is ~256x a typical 2^20-leaf subtree, so it never rejects a real one.
+	if haveInputLimit && numLeaves > maxNodes {
+		return fmt.Errorf("%w: %d declared, reader holds at most %d: %w", ErrNodeCountExceedsInput, numLeaves, maxNodes, io.ErrUnexpectedEOF)
+	}
+
+	if numLeaves > maxMmapDeserializeNodes {
+		return fmt.Errorf("%w: %d declared, limit is %d", ErrNodeCountExceedsLimit, numLeaves, uint64(maxMmapDeserializeNodes))
 	}
 
 	numLeavesInt, err := safe.Uint64ToInt(numLeaves)

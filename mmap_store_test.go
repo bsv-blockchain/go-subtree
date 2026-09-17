@@ -78,6 +78,25 @@ func (s zeroEndSeeker) Seek(offset int64, whence int) (int64, error) {
 	return s.r.Seek(offset, whence)
 }
 
+// sparseSeeker models a sparse or truncated file: Seek(0, io.SeekEnd) reports a
+// large logical size (advertisedLen) that clears the remaining-length bound, but
+// Read only ever yields the small header actually present. It proves the practical
+// ceiling catches a seekable count the length bound alone would admit.
+type sparseSeeker struct {
+	r             *bytes.Reader
+	advertisedLen int64
+}
+
+func (s *sparseSeeker) Read(p []byte) (int, error) { return s.r.Read(p) }
+
+func (s *sparseSeeker) Seek(offset int64, whence int) (int64, error) {
+	if whence == io.SeekEnd {
+		return s.advertisedLen, nil // advertise the large logical size
+	}
+
+	return s.r.Seek(offset, whence)
+}
+
 // TestNewFileBackedMmapNodes_RejectsHostileCapacity pins that a capacity which
 // cannot be mapped is rejected as an ordinary error — never as a panic, and never
 // via the belt-and-braces recover (asserting the specific sentinel proves the
@@ -232,8 +251,41 @@ func TestNewSubtreeFromReaderMmap_CountExceedsInput(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, ErrNodeCountExceedsInput)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF, "a truncated seekable input must preserve the io.ErrUnexpectedEOF contract")
 	require.Nil(t, st)
 	require.Empty(t, mmapTempFiles(t, dir), "an impossible count must not map a scratch file")
+}
+
+// TestNewSubtreeFromReaderMmap_SeekableSparseExceedsLimit pins the practical
+// ceiling for a seekable reader too. Seek(0, io.SeekEnd) reports a file's logical
+// size, so a sparse/truncated file can advertise room for a huge count while
+// holding only a header — clearing the remaining-length bound. The ceiling must
+// still reject it (ErrNodeCountExceedsLimit) before a multi-terabyte scratch file
+// is mapped, capping the hostile sparse case at the same limit as a stream.
+func TestNewSubtreeFromReaderMmap_SeekableSparseExceedsLimit(t *testing.T) {
+	dir := t.TempDir()
+
+	const count = uint64(maxMmapDeserializeNodes) + 1
+
+	header := make([]byte, rootHashPlusFeesPlusSizeLen+8)
+	binary.LittleEndian.PutUint64(header[numLeavesOffset:], count)
+
+	// advertisedLen clears the length bound (maxNodes == count) so only the ceiling
+	// can reject the count — exactly the sparse-file shape the ceiling guards against.
+	reader := &sparseSeeker{r: bytes.NewReader(header), advertisedLen: int64(count) * nodeSerializedLen}
+
+	var (
+		st  *Subtree
+		err error
+	)
+
+	require.NotPanics(t, func() {
+		st, err = NewSubtreeFromReaderMmap(reader, dir)
+	})
+
+	require.ErrorIs(t, err, ErrNodeCountExceedsLimit)
+	require.Nil(t, st)
+	require.Empty(t, mmapTempFiles(t, dir), "a count over the ceiling must not map a scratch file")
 }
 
 // TestNewSubtreeFromReaderMmap_ShortBodyNonSeekable pins the fallback for readers
