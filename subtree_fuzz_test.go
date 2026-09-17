@@ -1,8 +1,45 @@
 package subtree
 
 import (
+	"bytes"
+	"encoding/binary"
+	"math"
 	"testing"
 )
+
+// FuzzNewSubtreeFromReaderMmap is the broad safety net for S-1: no serialized
+// bytes, however malformed, may escape the mmap loader as a panic. A returned
+// error or a valid subtree is fine; a panic is the process crash the audit found.
+//
+// Inputs whose declared count would map a huge (sparse) scratch file are skipped:
+// they exercise the OS allocator rather than this parser and slow the fuzzer to a
+// crawl. The bound and overflow handling for large counts are covered exhaustively
+// by the table tests in mmap_store_test.go instead.
+func FuzzNewSubtreeFromReaderMmap(f *testing.F) {
+	auditHeader := make([]byte, numLeavesOffset+8)
+	binary.LittleEndian.PutUint64(auditHeader[numLeavesOffset:], auditHostileCount)
+	f.Add(auditHeader)
+
+	maxHeader := make([]byte, numLeavesOffset+8)
+	binary.LittleEndian.PutUint64(maxHeader[numLeavesOffset:], math.MaxUint64)
+	f.Add(maxHeader)
+
+	f.Add([]byte{})
+	f.Add(make([]byte, numLeavesOffset+8)) // count == 0
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) >= numLeavesOffset+8 {
+			if count := binary.LittleEndian.Uint64(data[numLeavesOffset:]); count > 4096 {
+				return
+			}
+		}
+
+		st, err := NewSubtreeFromReaderMmap(bytes.NewReader(data), t.TempDir())
+		if err == nil && st != nil {
+			_ = st.Close()
+		}
+	})
+}
 
 // FuzzCeilPowerOfTwo tests the CeilPowerOfTwo function with fuzzing
 func FuzzCeilPowerOfTwo(f *testing.F) {

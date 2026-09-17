@@ -97,4 +97,14 @@ var (
 var (
 	// ErrCapacityNotPositive is returned when mmap capacity is not positive
 	ErrCapacityNotPositive = errors.New("capacity must be positive")
+
+	// ErrCapacityTooLarge is returned when the requested mmap capacity would
+	// overflow the arithmetic used to map it: capacity * nodeSize (the mapped
+	// byte size) and the unsafe.Slice length. Bounded by math.MaxInt/nodeSize.
+	ErrCapacityTooLarge = errors.New("mmap capacity too large")
+
+	// ErrMmapPanic is returned when an unsafe or mmap operation panics. The
+	// panic is recovered and converted into an ordinary error rather than being
+	// allowed to escape into the caller's process.
+	ErrMmapPanic = errors.New("mmap operation panicked")
 )

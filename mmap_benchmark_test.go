@@ -1,6 +1,8 @@
 package subtree
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"runtime"
 	"testing"
@@ -118,5 +120,39 @@ func BenchmarkSubtreeAddNode_Mmap(b *testing.B) {
 			tree.Nodes = tree.Nodes[:0] // reset
 		}
 		_ = tree.AddSubtreeNodeWithoutLock(node)
+	}
+}
+
+// BenchmarkNewSubtreeFromReaderMmap measures the mmap load path end to end — the
+// path that now carries the leaf-count bound, safe conversion, and the deferred
+// recover. It exists to confirm those O(1) guards add no measurable overhead
+// (compare with benchstat before/after the S-1 hardening).
+func BenchmarkNewSubtreeFromReaderMmap(b *testing.B) {
+	const numNodes = 1 << 10 // 1024-node subtree
+
+	tree, err := NewTreeByLeafCount(numNodes)
+	require.NoError(b, err)
+
+	data := make([]byte, 8)
+	for i := 0; i < numNodes; i++ {
+		binary.LittleEndian.PutUint64(data, uint64(i))
+		require.NoError(b, tree.AddSubtreeNodeWithoutLock(Node{
+			Hash: chainhash.HashH(data), Fee: uint64(i), SizeInBytes: uint64(i),
+		}))
+	}
+
+	serialized, err := tree.Serialize()
+	require.NoError(b, err)
+
+	dir := b.TempDir()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		st, err := NewSubtreeFromReaderMmap(bytes.NewReader(serialized), dir)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		_ = st.Close()
 	}
 }

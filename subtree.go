@@ -184,10 +184,21 @@ func NewSubtreeFromReader(reader io.Reader) (*Subtree, error) {
 // NewSubtreeFromReaderMmap creates a new Subtree from the provided reader, with Nodes
 // backed by file-backed mmap in the given directory. Call Close() when done.
 // This avoids heap allocation for the Node array entirely.
-func NewSubtreeFromReaderMmap(reader io.Reader, dir string) (*Subtree, error) {
+func NewSubtreeFromReaderMmap(reader io.Reader, dir string) (st *Subtree, err error) {
 	subtree := &Subtree{}
 
-	if err := subtree.deserializeFromReaderMmap(reader, dir); err != nil {
+	// Match the panic-safety contract of the heap constructors. The count bound
+	// and the recover inside newFileBackedMmapNodes already make a panic on this
+	// path unreachable, but if one ever occurs, release any region already mapped
+	// (Close is a no-op when nothing was) and surface it as an ordinary error.
+	defer func() {
+		if r := recover(); r != nil {
+			_ = subtree.Close()
+			st, err = nil, fmt.Errorf("%w: %v", ErrMmapPanic, r)
+		}
+	}()
+
+	if err = subtree.deserializeFromReaderMmap(reader, dir); err != nil {
 		return nil, err
 	}
 
@@ -921,11 +932,25 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	}
 	numLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	st.treeSize = int(numLeaves) //nolint:gosec // G115: numLeaves bounded by serialized data
+	// The leaf count comes straight from the stream. Bound it before it sizes any
+	// allocation or feeds unsafe.Slice: math.MaxInt/nodeSize is the largest count
+	// whose mmap-backed []Node view cannot overflow. newFileBackedMmapNodes
+	// enforces the same bound, but failing here first yields a clearer error and
+	// skips the wasted treeSize/Height math below.
+	if numLeaves > uint64(math.MaxInt)/uint64(nodeSize) {
+		return fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
+	}
+
+	numLeavesInt, err := safe.Uint64ToInt(numLeaves)
+	if err != nil {
+		return err
+	}
+
+	st.treeSize = numLeavesInt
 	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
 
 	// Allocate Nodes via mmap
-	nodes, closer, err := newFileBackedMmapNodes(int(numLeaves), dir) //nolint:gosec // G115: numLeaves bounded by serialized data
+	nodes, closer, err := newFileBackedMmapNodes(numLeavesInt, dir)
 	if err != nil {
 		return fmt.Errorf("mmap allocation for %d nodes failed: %w", numLeaves, err)
 	}
