@@ -113,4 +113,10 @@ var (
 	// driving a huge scratch-file mmap before a single node has been read, when the
 	// reader's remaining size is knowable.
 	ErrNodeCountExceedsInput = errors.New("declared node count exceeds reader size")
+
+	// ErrNodeCountExceedsLimit is returned when a non-seekable reader declares more
+	// nodes than maxMmapDeserializeNodes. The length of such a reader cannot be
+	// known in advance, so a practical ceiling stops a hostile stream from driving
+	// a multi-terabyte mmap before any node is read.
+	ErrNodeCountExceedsLimit = errors.New("declared node count exceeds mmap deserialization limit")
 )

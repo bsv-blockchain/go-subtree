@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,34 @@ func mmapTempFiles(t *testing.T, dir string) []string {
 	require.NoError(t, err)
 
 	return files
+}
+
+// skipIfMmapUnsupported skips tests that require a working mmap backend. Windows
+// implements mmapFile as an unsupported operation (mmap_windows.go), so the
+// success paths cannot run there; the rejection paths, which fail before mapping,
+// still run everywhere.
+func skipIfMmapUnsupported(t *testing.T) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("mmap is not supported on Windows")
+	}
+}
+
+// unrecoverableSeeker satisfies io.Seeker but, after answering the initial
+// SeekCurrent probe, fails every subsequent seek — modelling a reader whose
+// position cannot be restored once a size probe has disturbed it. The loader must
+// treat this as a hard error rather than parsing from an unknown offset.
+type unrecoverableSeeker struct{ r io.Reader }
+
+func (s unrecoverableSeeker) Read(p []byte) (int, error) { return s.r.Read(p) }
+
+func (s unrecoverableSeeker) Seek(_ int64, whence int) (int64, error) {
+	if whence == io.SeekCurrent {
+		return 0, nil // the initial position query succeeds
+	}
+
+	return 0, io.ErrUnexpectedEOF // SeekEnd, and the restore that follows, both fail
 }
 
 // TestNewFileBackedMmapNodes_RejectsHostileCapacity pins that a capacity which
@@ -81,6 +110,8 @@ func TestNewFileBackedMmapNodes_RejectsHostileCapacity(t *testing.T) {
 // small capacity yields a zero-length, capacity-capped slice over a scratch file
 // that Close removes idempotently.
 func TestNewFileBackedMmapNodes_ValidCapacity(t *testing.T) {
+	skipIfMmapUnsupported(t)
+
 	dir := t.TempDir()
 
 	nodes, closer, err := newFileBackedMmapNodes(4, dir)
@@ -219,10 +250,61 @@ func TestNewSubtreeFromReaderMmap_ShortBodyNonSeekable(t *testing.T) {
 	require.Empty(t, mmapTempFiles(t, dir), "a short body must not leave a scratch file")
 }
 
+// TestNewSubtreeFromReaderMmap_NonSeekableCountExceedsLimit pins the practical
+// ceiling for readers whose length cannot be probed. A non-seekable stream can
+// declare a count (here maxMmapDeserializeNodes+1) that clears the overflow bound
+// yet would map a multi-terabyte scratch file; it must be rejected before mapping.
+// Only a header is supplied — the count is refused before any node is read.
+func TestNewSubtreeFromReaderMmap_NonSeekableCountExceedsLimit(t *testing.T) {
+	dir := t.TempDir()
+
+	header := make([]byte, rootHashPlusFeesPlusSizeLen+8)
+	binary.LittleEndian.PutUint64(header[numLeavesOffset:], uint64(maxMmapDeserializeNodes)+1)
+
+	var (
+		st  *Subtree
+		err error
+	)
+
+	require.NotPanics(t, func() {
+		st, err = NewSubtreeFromReaderMmap(nonSeekableReader{r: bytes.NewReader(header)}, dir)
+	})
+
+	require.ErrorIs(t, err, ErrNodeCountExceedsLimit)
+	require.Nil(t, st)
+	require.Empty(t, mmapTempFiles(t, dir), "a count over the non-seekable limit must not map a scratch file")
+}
+
+// TestNewSubtreeFromReaderMmap_SeekProbeUnrecoverable pins that a size probe which
+// leaves the reader's position unrecoverable is a hard error, not a silent
+// fallback. io.Seeker does not promise the position is unchanged after a failed
+// Seek, so parsing from an unknown offset (and misreading trailing bytes as a
+// header) must be refused outright.
+func TestNewSubtreeFromReaderMmap_SeekProbeUnrecoverable(t *testing.T) {
+	dir := t.TempDir()
+
+	valid, _ := buildSubtreeWithConflicting(t, 8, 0)
+
+	var (
+		st  *Subtree
+		err error
+	)
+
+	require.NotPanics(t, func() {
+		st, err = NewSubtreeFromReaderMmap(unrecoverableSeeker{r: bytes.NewReader(valid)}, dir)
+	})
+
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	require.Nil(t, st)
+	require.Empty(t, mmapTempFiles(t, dir), "a failed probe must not map a scratch file")
+}
+
 // TestNewSubtreeFromReaderMmap_ValidRoundTrip pins that valid subtrees — including
 // one carrying a conflicting-node trailer — still load and re-serialize byte for
 // byte through the mmap path after the hardening (zero regression).
 func TestNewSubtreeFromReaderMmap_ValidRoundTrip(t *testing.T) {
+	skipIfMmapUnsupported(t)
+
 	tests := []struct {
 		name           string
 		numNodes       int

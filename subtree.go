@@ -34,6 +34,16 @@ const (
 	// before any hash has actually been read. Conflicting nodes are rare and
 	// few; the slice grows if a subtree genuinely has more.
 	conflictingNodesPrealloc = 64
+
+	// maxMmapDeserializeNodes caps how many nodes a non-seekable reader may declare
+	// before deserializeFromReaderMmap will map a scratch file for them. A seekable
+	// reader is bounded exactly by its remaining length (see maxNodesInReader); this
+	// ceiling only applies when that length cannot be known, so a hostile network
+	// stream cannot declare a count such as 1<<40 and drive a multi-terabyte
+	// truncate+mmap before a single node is read. It is a resource-safety ceiling,
+	// not a protocol limit: ~256x a typical 2^20-leaf subtree (~12 GiB mapped), and
+	// it never constrains the seekable path that real subtrees arrive on.
+	maxMmapDeserializeNodes = 1 << 28
 )
 
 // Node represents a node in the subtree.
@@ -903,57 +913,83 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) error {
 }
 
 // maxNodesInReader reports the largest number of serialized nodes that could
-// follow in reader, when reader's remaining size is knowable. It returns
-// (0, false) for a reader that does not support seeking (e.g. a network stream),
-// so callers fall back to other bounds. The probe runs before any byte is
-// consumed and restores the reader's position, so it is safe to call first.
+// follow in reader, when reader's remaining size is knowable. The three results
+// distinguish three outcomes:
+//
+//   - (n, true, nil):  reader is seekable and holds room for at most n nodes.
+//   - (0, false, nil): reader is not seekable, or a probe failed with the position
+//     left intact, so the caller must fall back to other bounds.
+//   - (0, false, err): a seek failed and left the position unrecoverable, so
+//     continuing would parse from an arbitrary offset — a hard error, never a
+//     silent fallback.
+//
+// The probe runs before any byte is consumed and restores the reader's position.
+// io.Seeker does not promise the position is unchanged when Seek returns an error,
+// so a failed SeekEnd is followed by an explicit restore attempt; if that also
+// fails the position is unknown and the error is returned rather than swallowed.
 //
 // The bound is deliberately loose — it divides the entire remaining length
 // (header + nodes + trailer) by nodeSerializedLen — so it never rejects a
 // well-formed subtree; it only catches a count whose node array alone exceeds the
 // whole input.
-func maxNodesInReader(reader io.Reader) (uint64, bool) {
+func maxNodesInReader(reader io.Reader) (uint64, bool, error) {
 	seeker, ok := reader.(io.Seeker)
 	if !ok {
-		return 0, false
+		return 0, false, nil
 	}
 
+	// Seek(0, SeekCurrent) is a query; a failure here does not move the position,
+	// so fall back cleanly (e.g. a wrapper that satisfies io.Seeker but refuses).
 	cur, err := seeker.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return 0, false
+		//nolint:nilerr // a failed position query means the reader is unusable as a size probe; fall back to the non-seekable bound rather than failing the parse
+		return 0, false, nil
 	}
 
 	end, err := seeker.Seek(0, io.SeekEnd)
 	if err != nil {
-		return 0, false
+		// SeekEnd may have moved the position before failing. Try to restore it; a
+		// successful restore means we can safely fall back, a failed one means the
+		// position is unknown and parsing would read from an arbitrary offset.
+		if _, restoreErr := seeker.Seek(cur, io.SeekStart); restoreErr != nil {
+			return 0, false, fmt.Errorf("reader position unrecoverable after failed seek: %w", restoreErr)
+		}
+
+		// Position restored to the probe's start, so this is a clean "size unknown"
+		// fallback rather than the SeekEnd error to propagate.
+		return 0, false, nil
 	}
 
-	// Restore the position the probe started from; a failure here leaves the
-	// reader in an unknown state, so report "unknown" and let the read path fail.
+	// The end offset was read; the reader now sits at EOF and must be moved back.
 	if _, err = seeker.Seek(cur, io.SeekStart); err != nil {
-		return 0, false
+		return 0, false, fmt.Errorf("reader position unrecoverable after size probe: %w", err)
 	}
 
 	if end <= cur {
-		return 0, true
+		return 0, true, nil
 	}
 
 	// end > cur is guaranteed above, so the difference is positive; the safe
-	// conversion documents that for gosec and falls back to "unknown" on the
-	// impossible negative case rather than wrapping.
+	// conversion documents that for gosec. The error path is unreachable, but
+	// propagate it rather than swallowing if the impossible ever happens.
 	available, err := safe.Int64ToUint64(end - cur)
 	if err != nil {
-		return 0, false
+		return 0, false, err
 	}
 
-	return available / nodeSerializedLen, true
+	return available / nodeSerializedLen, true, nil
 }
 
 // deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
 func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error {
 	// Probe the reader's length before consuming anything, so a hostile leaf count
 	// can be rejected before it sizes a scratch file (see the input bound below).
-	maxNodes, haveInputLimit := maxNodesInReader(reader)
+	// A probe that leaves the position unrecoverable is a hard error, not a silent
+	// fallback — continuing would parse from an arbitrary offset.
+	maxNodes, haveInputLimit, probeErr := maxNodesInReader(reader)
+	if probeErr != nil {
+		return probeErr
+	}
 
 	buf := bufio.NewReaderSize(reader, 32*1024)
 
@@ -992,14 +1028,18 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 		return fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
 	}
 
-	// Reject a count whose node array cannot fit in the bytes the reader still
-	// holds. The overflow bound above only stops the arithmetic from wrapping; a
-	// count like 1<<40 is well under it yet would drive a ~48 TiB truncate+mmap
-	// from a tiny or malicious stream before a single node is read. This check is
-	// only possible when the reader's size is knowable — network streams fall back
-	// to the overflow bound plus the per-node EOF in the read loop below.
-	if haveInputLimit && numLeaves > maxNodes {
-		return fmt.Errorf("%w: %d declared, reader holds at most %d", ErrNodeCountExceedsInput, numLeaves, maxNodes)
+	// Reject a count that would size an unreasonable mmap before a single node is
+	// read. The overflow bound above only stops the arithmetic from wrapping; a
+	// count like 1<<40 is well under it yet would drive a ~48 TiB truncate+mmap.
+	// A seekable reader is bounded exactly by its remaining length; a non-seekable
+	// one (network stream), whose length cannot be known, is bounded by a practical
+	// ceiling so it cannot be used to exhaust virtual address space.
+	if haveInputLimit {
+		if numLeaves > maxNodes {
+			return fmt.Errorf("%w: %d declared, reader holds at most %d", ErrNodeCountExceedsInput, numLeaves, maxNodes)
+		}
+	} else if numLeaves > maxMmapDeserializeNodes {
+		return fmt.Errorf("%w: %d declared, limit is %d for a non-seekable reader", ErrNodeCountExceedsLimit, numLeaves, uint64(maxMmapDeserializeNodes))
 	}
 
 	numLeavesInt, err := safe.Uint64ToInt(numLeaves)
