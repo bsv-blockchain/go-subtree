@@ -902,8 +902,59 @@ func (st *Subtree) DeserializeFromReader(reader io.Reader) error {
 	return st.DeserializeFromReaderWithAllocator(reader, nil)
 }
 
+// maxNodesInReader reports the largest number of serialized nodes that could
+// follow in reader, when reader's remaining size is knowable. It returns
+// (0, false) for a reader that does not support seeking (e.g. a network stream),
+// so callers fall back to other bounds. The probe runs before any byte is
+// consumed and restores the reader's position, so it is safe to call first.
+//
+// The bound is deliberately loose — it divides the entire remaining length
+// (header + nodes + trailer) by nodeSerializedLen — so it never rejects a
+// well-formed subtree; it only catches a count whose node array alone exceeds the
+// whole input.
+func maxNodesInReader(reader io.Reader) (uint64, bool) {
+	seeker, ok := reader.(io.Seeker)
+	if !ok {
+		return 0, false
+	}
+
+	cur, err := seeker.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return 0, false
+	}
+
+	end, err := seeker.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, false
+	}
+
+	// Restore the position the probe started from; a failure here leaves the
+	// reader in an unknown state, so report "unknown" and let the read path fail.
+	if _, err = seeker.Seek(cur, io.SeekStart); err != nil {
+		return 0, false
+	}
+
+	if end <= cur {
+		return 0, true
+	}
+
+	// end > cur is guaranteed above, so the difference is positive; the safe
+	// conversion documents that for gosec and falls back to "unknown" on the
+	// impossible negative case rather than wrapping.
+	available, err := safe.Int64ToUint64(end - cur)
+	if err != nil {
+		return 0, false
+	}
+
+	return available / nodeSerializedLen, true
+}
+
 // deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
 func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error {
+	// Probe the reader's length before consuming anything, so a hostile leaf count
+	// can be rejected before it sizes a scratch file (see the input bound below).
+	maxNodes, haveInputLimit := maxNodesInReader(reader)
+
 	buf := bufio.NewReaderSize(reader, 32*1024)
 
 	bytes8 := make([]byte, 8)
@@ -939,6 +990,16 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	// skips the wasted treeSize/Height math below.
 	if numLeaves > uint64(math.MaxInt)/uint64(nodeSize) {
 		return fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
+	}
+
+	// Reject a count whose node array cannot fit in the bytes the reader still
+	// holds. The overflow bound above only stops the arithmetic from wrapping; a
+	// count like 1<<40 is well under it yet would drive a ~48 TiB truncate+mmap
+	// from a tiny or malicious stream before a single node is read. This check is
+	// only possible when the reader's size is knowable — network streams fall back
+	// to the overflow bound plus the per-node EOF in the read loop below.
+	if haveInputLimit && numLeaves > maxNodes {
+		return fmt.Errorf("%w: %d declared, reader holds at most %d", ErrNodeCountExceedsInput, numLeaves, maxNodes)
 	}
 
 	numLeavesInt, err := safe.Uint64ToInt(numLeaves)

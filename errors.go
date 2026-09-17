@@ -107,4 +107,10 @@ var (
 	// panic is recovered and converted into an ordinary error rather than being
 	// allowed to escape into the caller's process.
 	ErrMmapPanic = errors.New("mmap operation panicked")
+
+	// ErrNodeCountExceedsInput is returned when a serialized subtree declares more
+	// nodes than the reader could possibly contain. It stops a hostile count from
+	// driving a huge scratch-file mmap before a single node has been read, when the
+	// reader's remaining size is knowable.
+	ErrNodeCountExceedsInput = errors.New("declared node count exceeds reader size")
 )

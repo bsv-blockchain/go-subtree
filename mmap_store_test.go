@@ -38,6 +38,11 @@ func mmapTempFiles(t *testing.T, dir string) []string {
 // bound fired before unsafe.Slice, not that a panic was caught after it). Before
 // the bound, capacity*nodeSize overflowed int and unsafe.Slice panicked on the
 // oversized length: the S-1 process-crash primitive.
+//
+// The int boundary values below are representable on every architecture, so this
+// test compiles on 32-bit too. The audit value 768614336404564651 exceeds MaxInt
+// on 32-bit and so cannot be a compile-time int constant here; it is exercised as
+// a uint64 through the reader path in TestNewSubtreeFromReaderMmap_HostileCount.
 func TestNewFileBackedMmapNodes_RejectsHostileCapacity(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -48,7 +53,6 @@ func TestNewFileBackedMmapNodes_RejectsHostileCapacity(t *testing.T) {
 		{name: "negative", cap: -1, wantErr: ErrCapacityNotPositive},
 		{name: "max int", cap: math.MaxInt, wantErr: ErrCapacityTooLarge},
 		{name: "one past the bound", cap: math.MaxInt/nodeSize + 1, wantErr: ErrCapacityTooLarge},
-		{name: "audit count", cap: int(auditHostileCount), wantErr: ErrCapacityTooLarge},
 	}
 
 	for _, tt := range tests {
@@ -155,11 +159,41 @@ func TestNewSubtreeFromReaderMmap_AuditHeaderOnly(t *testing.T) {
 	require.Empty(t, mmapTempFiles(t, dir))
 }
 
-// TestNewSubtreeFromReaderMmap_ShortBody pins that a declared count larger than the
-// bytes present — a file shorter than its declared layout — fails cleanly and
-// removes its scratch file, rather than reading past the mapped region. The count
-// is small enough to map, so this exercises the read loop's EOF path, not the bound.
-func TestNewSubtreeFromReaderMmap_ShortBody(t *testing.T) {
+// TestNewSubtreeFromReaderMmap_CountExceedsInput pins the input-size bound: a
+// count that clears the overflow bound but whose node array cannot fit in the
+// reader's remaining bytes (e.g. 1<<40 behind a tiny body) is rejected before any
+// scratch file is mapped. Without it, that count would drive a ~48 TiB
+// truncate+mmap from a few hundred bytes. bytes.Reader is seekable, so the size
+// is knowable.
+func TestNewSubtreeFromReaderMmap_CountExceedsInput(t *testing.T) {
+	dir := t.TempDir()
+
+	valid, _ := buildSubtreeWithConflicting(t, 8, 0)
+
+	corrupted := make([]byte, len(valid))
+	copy(corrupted, valid)
+	binary.LittleEndian.PutUint64(corrupted[numLeavesOffset:], 1<<40)
+
+	var (
+		st  *Subtree
+		err error
+	)
+
+	require.NotPanics(t, func() {
+		st, err = NewSubtreeFromReaderMmap(bytes.NewReader(corrupted), dir)
+	})
+
+	require.ErrorIs(t, err, ErrNodeCountExceedsInput)
+	require.Nil(t, st)
+	require.Empty(t, mmapTempFiles(t, dir), "an impossible count must not map a scratch file")
+}
+
+// TestNewSubtreeFromReaderMmap_ShortBodyNonSeekable pins the fallback for readers
+// whose size is not knowable: the input-size bound is skipped, so a declared count
+// larger than the body present is caught by the per-node read loop hitting EOF.
+// The mapping is created first, so this also asserts the scratch file is cleaned
+// up on the read failure. The count stays small enough to map cheaply.
+func TestNewSubtreeFromReaderMmap_ShortBodyNonSeekable(t *testing.T) {
 	dir := t.TempDir()
 
 	valid, _ := buildSubtreeWithConflicting(t, 8, 0)
@@ -174,8 +208,10 @@ func TestNewSubtreeFromReaderMmap_ShortBody(t *testing.T) {
 		err error
 	)
 
+	// nonSeekableReader hides the Seeker bytes.Reader provides, so maxNodesInReader
+	// reports "unknown" and the read loop is what fails.
 	require.NotPanics(t, func() {
-		st, err = NewSubtreeFromReaderMmap(bytes.NewReader(corrupted), dir)
+		st, err = NewSubtreeFromReaderMmap(nonSeekableReader{r: bytes.NewReader(corrupted)}, dir)
 	})
 
 	require.Error(t, err)
