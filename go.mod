@@ -3,14 +3,14 @@ module github.com/bsv-blockchain/go-subtree
 go 1.26.0
 
 require (
-	github.com/bsv-blockchain/go-bt/v2 v2.7.3
+	github.com/bsv-blockchain/go-bt/v2 v2.7.4
 	github.com/bsv-blockchain/go-safe-conversion v1.2.0
 	github.com/bsv-blockchain/go-tx-map v1.5.0
 	github.com/stretchr/testify v1.12.1
 )
 
 require (
-	github.com/bsv-blockchain/go-sdk v1.5.2 // indirect
+	github.com/bsv-blockchain/go-sdk v1.6.0 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
