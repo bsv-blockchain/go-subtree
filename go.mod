@@ -10,11 +10,11 @@ require (
 )
 
 require (
-	github.com/bsv-blockchain/go-sdk v1.6.0 // indirect
+	github.com/bsv-blockchain/go-sdk v1.7.2 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
