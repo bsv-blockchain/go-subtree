@@ -274,14 +274,15 @@ func (s *Meta) serializeTxInpoints(buf *bytes.Buffer) error {
 		return fmt.Errorf("cannot serialize, unable to write total number of nodes: %w", err)
 	}
 
-	var txInPointBytes []byte
-
 	// write parent txInpoints
 	// for _, txInpoint := range s.TxInpoints {
 	for i := uint32(0); i < parentTxHashesLen32; i++ {
 		txInpoint := s.TxInpoints[i]
 
-		txInPointBytes, err = txInpoint.Serialize()
+		// Encode straight into the buffer's spare capacity: no per-node
+		// allocation. Write then commits the bytes (a copy onto itself when
+		// the buffer had room, otherwise it grows the buffer).
+		txInPointBytes, err := txInpoint.AppendSerialized(buf.AvailableBuffer())
 		if err != nil {
 			return fmt.Errorf("cannot serialize, unable to write parent tx hash: %w", err)
 		}
