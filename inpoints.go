@@ -203,9 +203,29 @@ func (p *TxInpoints) GetParentVoutsAtIndex(index int) ([]uint32, error) {
 	return p.voutSliceForParent(index), nil
 }
 
-// Serialize serializes the TxInpoints object into a byte slice. The wire
-// format is unchanged from the pre-packed-layout version.
+// Serialize serializes the TxInpoints object into a newly allocated byte
+// slice. The wire format is unchanged from the pre-packed-layout version.
+//
+// It is SerializedSize followed by AppendSerialized into an exactly sized
+// buffer, so the result is always identical to what AppendSerialized appends.
 func (p *TxInpoints) Serialize() ([]byte, error) {
+	size, err := p.SerializedSize()
+	if err != nil {
+		return nil, err
+	}
+
+	return p.AppendSerialized(make([]byte, 0, size))
+}
+
+// SerializedSize returns the exact number of bytes Serialize returns and
+// AppendSerialized appends: a 4 byte parent count, 32 bytes per parent hash,
+// and 4 bytes per word of the packed vout layout. It does not allocate.
+//
+// It returns ErrParentTxHashesMismatch for exactly the layouts Serialize
+// rejects: no parents with a non-empty vout layout, or fewer vout words than
+// parents. Layouts NewTxInpointsFromPacked's contract forbids but Serialize
+// accepts (for example trailing extra words) are sized as Serialize writes them.
+func (p *TxInpoints) SerializedSize() (int, error) {
 	parentCount := len(p.ParentTxHashes)
 
 	// Layout invariant: when parentCount > 0 voutIdxs must hold at least the
@@ -213,43 +233,49 @@ func (p *TxInpoints) Serialize() ([]byte, error) {
 	// be empty.
 	if (parentCount == 0 && len(p.voutIdxs) != 0) ||
 		(parentCount > 0 && len(p.voutIdxs) < parentCount) {
-		return nil, ErrParentTxHashesMismatch
+		return 0, ErrParentTxHashesMismatch
 	}
 
-	// Pre-size: 4 byte header + 32 bytes per parent hash + 4 bytes per
-	// voutIdxs entry (both count and value words).
-	bufBytes := make([]byte, 0, 4+parentCount*32+len(p.voutIdxs)*4)
-	buf := bytes.NewBuffer(bufBytes)
+	// 4 byte header + 32 bytes per parent hash + 4 bytes per voutIdxs entry
+	// (both count and value words).
+	return 4 + parentCount*chainhash.HashSize + len(p.voutIdxs)*4, nil
+}
 
-	var (
-		err         error
-		bytesUint32 [4]byte
-	)
-
-	binary.LittleEndian.PutUint32(bytesUint32[:], len32(p.ParentTxHashes))
-
-	if _, err = buf.Write(bytesUint32[:]); err != nil {
-		return nil, fmt.Errorf("unable to write number of parent inpoints: %w", err)
+// AppendSerialized appends the bytes Serialize would return to dst and returns
+// the extended slice, in the manner of the standard library's Append*
+// functions. dst is grown at most once, to the exact required size, so it does
+// not allocate when cap(dst)-len(dst) >= SerializedSize.
+//
+// On error it returns dst with its original length and contents, and writes
+// nothing to it. The errors are those of Serialize.
+func (p *TxInpoints) AppendSerialized(dst []byte) ([]byte, error) {
+	size, err := p.SerializedSize()
+	if err != nil {
+		return dst, err
 	}
 
-	for _, hash := range p.ParentTxHashes {
-		if _, err = buf.Write(hash[:]); err != nil {
-			return nil, fmt.Errorf("unable to write parent tx hash: %w", err)
-		}
+	dst = slices.Grow(dst, size)
+	off := len(dst)
+	dst = dst[:off+size]
+	out := dst[off:]
+
+	binary.LittleEndian.PutUint32(out, len32(p.ParentTxHashes))
+	out = out[4:]
+
+	for i := range p.ParentTxHashes {
+		copy(out, p.ParentTxHashes[i][:])
+		out = out[chainhash.HashSize:]
 	}
 
 	// voutIdxs is already laid out as [count_0, vals..., count_1, vals..., ...]
-	// — exactly the wire format. Stream it out one uint32 at a time so we
-	// stay endian-correct.
+	// — exactly the wire format. Write it one uint32 at a time so we stay
+	// endian-correct.
 	for _, v := range p.voutIdxs {
-		binary.LittleEndian.PutUint32(bytesUint32[:], v)
-
-		if _, err = buf.Write(bytesUint32[:]); err != nil {
-			return nil, fmt.Errorf("unable to write parent index: %w", err)
-		}
+		binary.LittleEndian.PutUint32(out, v)
+		out = out[4:]
 	}
 
-	return buf.Bytes(), nil
+	return dst, nil
 }
 
 // voutSliceForParent returns the underlying vout slice (no copy) for the i-th
