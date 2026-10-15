@@ -176,8 +176,9 @@ func (s *Meta) Serialize() ([]byte, error) {
 		}
 	}
 
-	bufBytes := make([]byte, 0, 32*1024) // 32MB (arbitrary size, should be enough for most cases)
-	buf := bytes.NewBuffer(bufBytes)
+	// Size the buffer exactly: a growing buffer copied a full subtree's meta
+	// (around 100 MB) a dozen times.
+	buf := bytes.NewBuffer(make([]byte, 0, s.serializedSize(subtreeLen)))
 
 	s.rootHash = *s.Subtree.RootHash()
 
@@ -253,6 +254,25 @@ func (s *Meta) deserializeTxInpointsFromReader(buf io.Reader, txInpointsLen uint
 	}
 
 	return nil
+}
+
+// serializedSize returns the number of bytes Serialize writes for the first
+// subtreeLen TxInpoints: the root hash, the count, and each TxInpoints. If one
+// cannot be sized it returns what it has so far; serializeTxInpoints then
+// reports that TxInpoints' error.
+func (s *Meta) serializedSize(subtreeLen int) int {
+	size := chainhash.HashSize + 4
+
+	for i := 0; i < subtreeLen; i++ {
+		n, err := s.TxInpoints[i].SerializedSize()
+		if err != nil {
+			break
+		}
+
+		size += n
+	}
+
+	return size
 }
 
 // serializeTxInpoints serializes the TxInpoints of the Meta into the provided buffer.

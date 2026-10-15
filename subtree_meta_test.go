@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bsv-blockchain/go-bt/v2"
+	"github.com/bsv-blockchain/go-bt/v2/chainhash"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -395,4 +396,54 @@ func TestMetaSerializeErrors(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "parent tx hashes are not set for node")
 	})
+}
+
+// buildLargeMeta returns a subtree meta for n transactions, each with one
+// parent and two vouts: well past the size at which Serialize's buffer used to
+// start doubling.
+func buildLargeMeta(t testing.TB, n int) *Meta {
+	t.Helper()
+
+	st, err := NewTreeByLeafCount(n)
+	require.NoError(t, err)
+
+	for i := 0; i < n; i++ {
+		require.NoError(t, st.AddNode(chainhash.HashH([]byte{byte(i), byte(i >> 8), byte(i >> 16)}), 1, 1))
+	}
+
+	meta := NewSubtreeMeta(st)
+
+	for i := 0; i < n; i++ {
+		parent := chainhash.HashH([]byte{'p', byte(i), byte(i >> 8), byte(i >> 16)})
+		require.NoError(t, meta.SetTxInpoints(i, NewTxInpointsFromPacked([]chainhash.Hash{parent}, []uint32{2, 0, 1})))
+	}
+
+	return meta
+}
+
+// Serialize sizes its buffer exactly, so a full subtree's meta is written in
+// one allocation instead of growing a 32 KB buffer a dozen times.
+func TestMetaSerializeSizesBufferExactly(t *testing.T) {
+	meta := buildLargeMeta(t, 1<<14)
+
+	b, err := meta.Serialize()
+	require.NoError(t, err)
+	require.Equal(t, len(b), cap(b), "the buffer must be sized exactly")
+
+	got, err := NewSubtreeMetaFromBytes(meta.Subtree, b)
+	require.NoError(t, err)
+	require.Equal(t, meta.TxInpoints, got.TxInpoints)
+}
+
+func BenchmarkMetaSerialize(b *testing.B) {
+	meta := buildLargeMeta(b, 1<<16)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if _, err := meta.Serialize(); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
