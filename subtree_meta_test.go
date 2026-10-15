@@ -447,3 +447,40 @@ func BenchmarkMetaSerialize(b *testing.B) {
 		}
 	}
 }
+
+// The exact size holds for every TxInpoints shape: an empty entry at index 0
+// (the coinbase placeholder), one parent, and several parents with several
+// vouts each.
+func TestMetaSerializeSizesBufferExactlyForEveryShape(t *testing.T) {
+	p := func(i byte) chainhash.Hash { return chainhash.HashH([]byte{'s', i}) }
+
+	shapes := []TxInpoints{
+		{},
+		NewTxInpointsFromPacked([]chainhash.Hash{p(1)}, []uint32{1, 7}),
+		NewTxInpointsFromPacked([]chainhash.Hash{p(2), p(3), p(4)}, []uint32{2, 0, 5, 1, 9, 3, 1, 2, 3}),
+	}
+
+	st, err := NewTreeByLeafCount(4)
+	require.NoError(t, err)
+
+	for i := 0; i < 4; i++ {
+		require.NoError(t, st.AddNode(chainhash.HashH([]byte{'n', byte(i)}), 1, 1))
+	}
+
+	meta := NewSubtreeMeta(st)
+	require.NoError(t, meta.SetTxInpoints(0, shapes[0]))
+	require.NoError(t, meta.SetTxInpoints(1, shapes[1]))
+	require.NoError(t, meta.SetTxInpoints(2, shapes[2]))
+	require.NoError(t, meta.SetTxInpoints(3, shapes[1]))
+
+	b, err := meta.Serialize()
+	require.NoError(t, err)
+	require.Equal(t, len(b), cap(b))
+
+	got, err := NewSubtreeMetaFromBytes(st, b)
+	require.NoError(t, err)
+
+	for i := 1; i < 4; i++ {
+		require.Equal(t, meta.TxInpoints[i].ParentTxHashes, got.TxInpoints[i].ParentTxHashes, "node %d", i)
+	}
+}
