@@ -264,6 +264,34 @@ func TestMetaGetTxInpoints(t *testing.T) {
 	})
 }
 
+func TestMetaAppendTxInpoints(t *testing.T) {
+	txs, _, subtreeMeta := initMeta(t)
+
+	t.Run("out of range index", func(t *testing.T) {
+		dst := []Inpoint{{Index: 1}}
+
+		got, err := subtreeMeta.AppendTxInpoints(5, dst)
+		require.ErrorIs(t, err, ErrIndexOutOfRange)
+		require.Equal(t, dst, got)
+	})
+
+	t.Run("matches GetTxInpoints", func(t *testing.T) {
+		var buf []Inpoint
+
+		for i := 0; i < 4; i++ {
+			want, err := subtreeMeta.GetTxInpoints(i)
+			require.NoError(t, err)
+
+			var appendErr error
+
+			buf, appendErr = subtreeMeta.AppendTxInpoints(i, buf[:0])
+			require.NoError(t, appendErr)
+			require.Equal(t, want, buf)
+			require.Equal(t, *txs[i].Inputs[0].PreviousTxIDChainHash(), buf[0].Hash)
+		}
+	})
+}
+
 func TestMetaSetTxInpoints(t *testing.T) {
 	t.Run("TestSetTxInpointsFromTx", func(t *testing.T) {
 		txs, _, subtreeMeta := initMeta(t)

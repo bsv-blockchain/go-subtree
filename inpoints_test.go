@@ -101,6 +101,42 @@ func TestGetTxInpoints(t *testing.T) {
 	assert.Equal(t, *tx.Inputs[0].PreviousTxIDChainHash(), inpoints[0].Hash)
 }
 
+func TestAppendTxInpoints(t *testing.T) {
+	a := chainhash.HashH([]byte("parent-a"))
+	b := chainhash.HashH([]byte("parent-b"))
+	prev := Inpoint{Hash: chainhash.HashH([]byte("prev")), Index: 1}
+
+	p := NewTxInpoints()
+	p.appendInput(a, 7)
+	p.appendInput(b, 3)
+	p.appendInput(a, 9)
+
+	t.Run("appends in parent-then-vout order after dst", func(t *testing.T) {
+		got := p.AppendTxInpoints([]Inpoint{prev})
+		require.Equal(t, []Inpoint{prev, {a, 7}, {a, 9}, {b, 3}}, got)
+		require.Equal(t, p.GetTxInpoints(), got[1:])
+	})
+
+	t.Run("no inpoints leaves dst as it is", func(t *testing.T) {
+		empty := NewTxInpoints()
+		require.Nil(t, empty.AppendTxInpoints(nil))
+		require.Equal(t, []Inpoint{prev}, empty.AppendTxInpoints([]Inpoint{prev}))
+
+		var zero TxInpoints
+		require.Nil(t, zero.AppendTxInpoints(nil))
+	})
+
+	t.Run("does not allocate into a buffer with room", func(t *testing.T) {
+		buf := make([]Inpoint, 0, 8)
+
+		allocs := testing.AllocsPerRun(100, func() {
+			buf = p.AppendTxInpoints(buf[:0])
+		})
+		require.Zero(t, allocs)
+		require.Len(t, buf, 3)
+	})
+}
+
 func TestGetParentTxHashAtIndex(t *testing.T) {
 	t.Run("TestGetParentTxHashAtIndex", func(t *testing.T) {
 		p, err := NewTxInpointsFromTx(tx)

@@ -173,14 +173,22 @@ func (p *TxInpoints) GetParentTxHashAtIndex(index int) (chainhash.Hash, error) {
 // GetTxInpoints returns the inpoints for the tx as a flat (hash, vout) slice
 // in parent-then-vout order. Allocates a new slice — the caller owns it.
 func (p *TxInpoints) GetTxInpoints() []Inpoint {
-	inpoints := make([]Inpoint, 0, p.nrInputs())
+	return p.AppendTxInpoints(make([]Inpoint, 0, p.nrInputs()))
+}
+
+// AppendTxInpoints appends the inpoints for the tx to dst in the order
+// GetTxInpoints returns them and returns the extended slice. A caller that
+// reuses dst across txs allocates only when a tx has more inputs than dst
+// has room for.
+func (p *TxInpoints) AppendTxInpoints(dst []Inpoint) []Inpoint {
+	dst = slices.Grow(dst, p.nrInputs())
 
 	pos := 0
 
 	for _, hash := range p.ParentTxHashes {
 		count := int(p.voutIdxs[pos])
 		for k := 1; k <= count; k++ {
-			inpoints = append(inpoints, Inpoint{
+			dst = append(dst, Inpoint{
 				Hash:  hash,
 				Index: p.voutIdxs[pos+k],
 			})
@@ -189,7 +197,7 @@ func (p *TxInpoints) GetTxInpoints() []Inpoint {
 		pos += 1 + count
 	}
 
-	return inpoints
+	return dst
 }
 
 // GetParentVoutsAtIndex returns the parent transaction output indexes at the
