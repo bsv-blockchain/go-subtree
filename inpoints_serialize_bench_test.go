@@ -73,3 +73,37 @@ func BenchmarkTxInpointsAppendSerialized(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkTxInpointsGetTxInpoints measures GetTxInpoints, which allocates the
+// result for every call.
+func BenchmarkTxInpointsGetTxInpoints(b *testing.B) {
+	for _, shape := range benchShapes {
+		p := benchInpoints(shape.parents, shape.vouts)
+
+		b.Run(shape.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_ = p.GetTxInpoints()
+			}
+		})
+	}
+}
+
+// BenchmarkTxInpointsAppendTxInpoints measures AppendTxInpoints into a reused
+// destination buffer, the way a caller walking many txs would use it.
+func BenchmarkTxInpointsAppendTxInpoints(b *testing.B) {
+	for _, shape := range benchShapes {
+		p := benchInpoints(shape.parents, shape.vouts)
+
+		b.Run(shape.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			var buf []Inpoint
+
+			for i := 0; i < b.N; i++ {
+				buf = p.AppendTxInpoints(buf[:0])
+			}
+		})
+	}
+}

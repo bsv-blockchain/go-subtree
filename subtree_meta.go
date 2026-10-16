@@ -115,6 +115,17 @@ func (s *Meta) GetTxInpoints(index int) ([]Inpoint, error) {
 	return s.TxInpoints[index].GetTxInpoints(), nil
 }
 
+// AppendTxInpoints appends the inpoints of the tx at index to dst, like
+// TxInpoints.AppendTxInpoints. On an index out of range it returns dst
+// unchanged and an error.
+func (s *Meta) AppendTxInpoints(index int, dst []Inpoint) ([]Inpoint, error) {
+	if index < 0 || index >= len(s.TxInpoints) {
+		return dst, fmt.Errorf("getting tx inpoints: %w", ErrIndexOutOfRange)
+	}
+
+	return s.TxInpoints[index].AppendTxInpoints(dst), nil
+}
+
 // SetTxInpointsFromTx sets the TxInpoints for the subtree meta from a transaction.
 // It finds the index of the transaction in the subtree and sets the TxInpoints at that index.
 // If the transaction is not found in the subtree, it returns an error.
