@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"math/bits"
+	"slices"
 	"sync"
 
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
@@ -1178,7 +1179,7 @@ func (st *Subtree) deserializeNodesWithAllocator(buf *bufio.Reader, alloc NodeAl
 
 		if i == len(nodes) {
 			// Only a count above maxNodePrealloc gets here: grow as the nodes arrive.
-			nodes = append(nodes, Node{})
+			nodes = slices.Grow(nodes, 1)
 			nodes = nodes[:min(cap(nodes), numLeavesInt)]
 		}
 

@@ -94,7 +94,7 @@ func TestNewSubtreeFromReader_HostileCounts(t *testing.T) {
 // hand the allocation straight to the caller's pool.
 func TestDeserializeFromReaderWithAllocator_HostileCountSkipsAllocator(t *testing.T) {
 	allocCalls := 0
-	alloc := func(n int) []Node {
+	alloc := func(_ int) []Node {
 		allocCalls++
 		return make([]Node, 0, 1)
 	}
