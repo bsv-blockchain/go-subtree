@@ -10,7 +10,7 @@ require (
 )
 
 require (
-	github.com/bsv-blockchain/go-sdk v1.7.2 // indirect
+	github.com/bsv-blockchain/go-sdk v1.7.3 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
