@@ -265,7 +265,7 @@ func TestNewSubtreeFromReaderMmap_CountExceedsInput(t *testing.T) {
 func TestNewSubtreeFromReaderMmap_SeekableSparseExceedsLimit(t *testing.T) {
 	dir := t.TempDir()
 
-	const count = uint64(maxMmapDeserializeNodes) + 1
+	const count = uint64(maxDeserializeNodes) + 1
 
 	header := make([]byte, rootHashPlusFeesPlusSizeLen+8)
 	binary.LittleEndian.PutUint64(header[numLeavesOffset:], count)
@@ -321,14 +321,14 @@ func TestNewSubtreeFromReaderMmap_ShortBodyNonSeekable(t *testing.T) {
 
 // TestNewSubtreeFromReaderMmap_NonSeekableCountExceedsLimit pins the practical
 // ceiling for readers whose length cannot be probed. A non-seekable stream can
-// declare a count (here maxMmapDeserializeNodes+1) that clears the overflow bound
+// declare a count (here maxDeserializeNodes+1) that clears the overflow bound
 // yet would map a multi-terabyte scratch file; it must be rejected before mapping.
 // Only a header is supplied — the count is refused before any node is read.
 func TestNewSubtreeFromReaderMmap_NonSeekableCountExceedsLimit(t *testing.T) {
 	dir := t.TempDir()
 
 	header := make([]byte, rootHashPlusFeesPlusSizeLen+8)
-	binary.LittleEndian.PutUint64(header[numLeavesOffset:], uint64(maxMmapDeserializeNodes)+1)
+	binary.LittleEndian.PutUint64(header[numLeavesOffset:], uint64(maxDeserializeNodes)+1)
 
 	var (
 		st  *Subtree
