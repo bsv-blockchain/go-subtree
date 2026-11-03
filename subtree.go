@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"math/bits"
+	"slices"
 	"sync"
 
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
@@ -34,16 +35,26 @@ const (
 	// few; the slice grows if a subtree genuinely has more.
 	conflictingNodesPrealloc = 64
 
-	// maxMmapDeserializeNodes caps how many nodes any reader may declare before
-	// deserializeFromReaderMmap maps a scratch file for them. A seekable reader is
-	// also bounded by its remaining length (see maxNodesInReader), but that bound
-	// trusts Seek(0, SeekEnd), which reports a file's *logical* size — a sparse or
-	// truncated file can advertise room for 1<<40 nodes while holding only a header.
-	// This ceiling stops any such count, seekable or not, from driving a
-	// multi-terabyte truncate+mmap before a single node is read. It is a
-	// resource-safety ceiling, not a protocol limit: ~256x a typical 2^20-leaf
-	// subtree (~12 GiB mapped), so it never constrains a real subtree.
-	maxMmapDeserializeNodes = 1 << 28
+	// maxDeserializeNodes caps how many nodes any reader may declare before the
+	// deserializers size a node array for them (a heap slice or an mmap scratch
+	// file). A seekable reader is also bounded by its remaining length (see
+	// maxNodesInReader), but that bound trusts Seek(0, SeekEnd), which reports a
+	// file's *logical* size — a sparse or truncated file can advertise room for
+	// 1<<40 nodes while holding only a header. This ceiling stops any such count,
+	// seekable or not, from driving a multi-terabyte allocation before a single
+	// node is read. It is a resource-safety ceiling, not a protocol limit: ~256x a
+	// typical 2^20-leaf subtree (~12 GiB), so it never constrains a real subtree.
+	maxDeserializeNodes = 1 << 28
+
+	// maxNodePrealloc caps how many nodes the heap deserializer allocates up front
+	// for a count it has not yet seen backed by bytes. maxDeserializeNodes alone
+	// would still let a 56-byte stream demand a ~12 GiB anonymous allocation, which
+	// unlike the mmap path's sparse file counts against memory, and a refused
+	// allocation is a fatal runtime throw rather than a recoverable panic. Counts
+	// above this cap grow the slice as nodes are actually read, so memory tracks
+	// the input. It equals a typical 2^20-leaf subtree (48 MiB), so subtrees up to
+	// that size are allocated exactly, and through the caller's allocator.
+	maxNodePrealloc = 1 << 20
 )
 
 // Node represents a node in the subtree.
@@ -823,9 +834,9 @@ func (st *Subtree) Deserialize(b []byte) (err error) {
 		}
 	}()
 
-	buf := bytes.NewBuffer(b)
-
-	return st.DeserializeFromReader(buf)
+	// bytes.Reader, unlike bytes.Buffer, is seekable, so the node count is bounded
+	// by len(b) before the node array is allocated.
+	return st.DeserializeFromReader(bytes.NewReader(b))
 }
 
 // NodeAllocator is a caller-supplied function that returns a backing slice for
@@ -856,6 +867,13 @@ func (st *Subtree) DeserializeFromReaderWithAllocator(reader io.Reader, alloc No
 		}
 	}()
 
+	// Probe the reader's length before bufio consumes anything, so a hostile leaf
+	// count can be rejected before it sizes the node array.
+	maxNodes, haveInputLimit, err := maxNodesInReader(reader)
+	if err != nil {
+		return err
+	}
+
 	buf := bufio.NewReaderSize(reader, 32*1024) // 32KB buffer
 
 	bytes8 := make([]byte, 8)
@@ -880,7 +898,7 @@ func (st *Subtree) DeserializeFromReaderWithAllocator(reader io.Reader, alloc No
 
 	st.SizeInBytes = binary.LittleEndian.Uint64(bytes8)
 
-	if err = st.deserializeNodesWithAllocator(buf, alloc); err != nil {
+	if err = st.deserializeNodesWithAllocator(buf, alloc, maxNodes, haveInputLimit); err != nil {
 		return err
 	}
 
@@ -991,6 +1009,40 @@ func maxNodesInReader(reader io.Reader) (uint64, bool, error) {
 	return available / nodeSerializedLen, true, nil
 }
 
+// checkDeclaredNodeCount bounds a leaf count read straight from the stream before
+// it sizes any allocation, and returns it as an int. maxNodes and haveInputLimit
+// are the results of maxNodesInReader for the same reader. Three guards apply:
+//
+//  1. math.MaxInt/nodeSize is the largest count whose []Node backing (heap or
+//     mmap-backed unsafe.Slice view) cannot overflow. newFileBackedMmapNodes
+//     enforces the same bound, but failing here first yields a clearer error.
+//  2. When the reader's length is knowable (seekable), a declared count whose
+//     node array cannot fit in the remaining bytes is rejected — this catches a
+//     truncated file. Such a count also means the stream ends before the declared
+//     nodes, so the error wraps io.ErrUnexpectedEOF too: a caller matching that
+//     sentinel keeps working (the non-seekable path surfaces it from the read
+//     loop), while ErrNodeCountExceedsInput names the specific reason.
+//  3. A practical ceiling applies to every reader. Seek(0, SeekEnd) reports a
+//     file's *logical* size, so a sparse or truncated seekable file can advertise
+//     room for 1<<40 nodes while holding only a header — clearing guard 2 yet
+//     driving a multi-terabyte allocation. The ceiling caps that; it is ~256x a
+//     typical 2^20-leaf subtree, so it never rejects a real one.
+func checkDeclaredNodeCount(numLeaves, maxNodes uint64, haveInputLimit bool) (int, error) {
+	if numLeaves > uint64(math.MaxInt)/uint64(nodeSize) {
+		return 0, fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
+	}
+
+	if haveInputLimit && numLeaves > maxNodes {
+		return 0, fmt.Errorf("%w: %d declared, reader holds at most %d: %w", ErrNodeCountExceedsInput, numLeaves, maxNodes, io.ErrUnexpectedEOF)
+	}
+
+	if numLeaves > maxDeserializeNodes {
+		return 0, fmt.Errorf("%w: %d declared, limit is %d", ErrNodeCountExceedsLimit, numLeaves, uint64(maxDeserializeNodes))
+	}
+
+	return safe.Uint64ToInt(numLeaves)
+}
+
 // deserializeFromReaderMmap deserializes the subtree, allocating Nodes in mmap'd memory.
 func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error {
 	// Probe the reader's length before consuming anything, so a hostile leaf count
@@ -1030,39 +1082,7 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 	}
 	numLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	// The leaf count comes straight from the stream. Bound it before it sizes any
-	// allocation or feeds unsafe.Slice: math.MaxInt/nodeSize is the largest count
-	// whose mmap-backed []Node view cannot overflow. newFileBackedMmapNodes
-	// enforces the same bound, but failing here first yields a clearer error and
-	// skips the wasted treeSize/Height math below.
-	if numLeaves > uint64(math.MaxInt)/uint64(nodeSize) {
-		return fmt.Errorf("%w: %d", ErrNumLeavesOutOfRange, numLeaves)
-	}
-
-	// Reject a count that would size an unreasonable mmap before a single node is
-	// read. Two guards apply, both before any scratch file is mapped; the overflow
-	// bound above only stops the arithmetic from wrapping.
-	//
-	//  1. When the reader's length is knowable (seekable), a declared count whose
-	//     node array cannot fit in the remaining bytes is rejected — this catches a
-	//     truncated file. Such a count also means the stream ends before the declared
-	//     nodes, so the error wraps io.ErrUnexpectedEOF too: a caller matching that
-	//     sentinel keeps working (the non-seekable path surfaces it from the read
-	//     loop below), while ErrNodeCountExceedsInput names the specific reason.
-	//  2. A practical ceiling applies to every reader. Seek(0, SeekEnd) reports a
-	//     file's *logical* size, so a sparse or truncated seekable file can advertise
-	//     room for 1<<40 nodes while holding only a header — clearing guard 1 yet
-	//     driving a multi-terabyte truncate+mmap. The ceiling caps that at ~12 GiB;
-	//     it is ~256x a typical 2^20-leaf subtree, so it never rejects a real one.
-	if haveInputLimit && numLeaves > maxNodes {
-		return fmt.Errorf("%w: %d declared, reader holds at most %d: %w", ErrNodeCountExceedsInput, numLeaves, maxNodes, io.ErrUnexpectedEOF)
-	}
-
-	if numLeaves > maxMmapDeserializeNodes {
-		return fmt.Errorf("%w: %d declared, limit is %d", ErrNodeCountExceedsLimit, numLeaves, uint64(maxMmapDeserializeNodes))
-	}
-
-	numLeavesInt, err := safe.Uint64ToInt(numLeaves)
+	numLeavesInt, err := checkDeclaredNodeCount(numLeaves, maxNodes, haveInputLimit)
 	if err != nil {
 		return err
 	}
@@ -1105,9 +1125,12 @@ func (st *Subtree) deserializeFromReaderMmap(reader io.Reader, dir string) error
 
 // deserializeNodesWithAllocator deserializes the node array.
 // When alloc is non-nil, its returned slice supplies the backing storage for
-// st.Nodes (resliced to [:numLeaves]). When alloc is nil OR the supplied slice
-// has insufficient cap, it falls back to make([]Node, numLeaves).
-func (st *Subtree) deserializeNodesWithAllocator(buf *bufio.Reader, alloc NodeAllocator) error {
+// st.Nodes. When alloc is nil OR the supplied slice has insufficient cap, it
+// falls back to make. maxNodes and haveInputLimit come from maxNodesInReader and
+// bound the declared count before anything is allocated (see
+// checkDeclaredNodeCount). A count above maxNodePrealloc is not handed to alloc,
+// whose contract is cap >= numLeaves; its slice instead grows as nodes are read.
+func (st *Subtree) deserializeNodesWithAllocator(buf *bufio.Reader, alloc NodeAllocator, maxNodes uint64, haveInputLimit bool) error {
 	bytes8 := make([]byte, 8)
 
 	// read number of leaves
@@ -1117,35 +1140,55 @@ func (st *Subtree) deserializeNodesWithAllocator(buf *bufio.Reader, alloc NodeAl
 
 	numLeaves := binary.LittleEndian.Uint64(bytes8)
 
-	st.treeSize = int(numLeaves) //nolint:gosec // G115: integer overflow conversion int -> uint32
+	numLeavesInt, err := checkDeclaredNodeCount(numLeaves, maxNodes, haveInputLimit)
+	if err != nil {
+		return err
+	}
+
+	st.treeSize = numLeavesInt
 	// the height of a subtree is always a power of two
 	st.Height = int(math.Ceil(math.Log2(float64(numLeaves))))
 
-	// Obtain backing storage from caller or fall back to make. The fallback path
-	// also catches the case where the caller's allocator returned a too-small
-	// slice — safer than panicking.
-	if alloc != nil {
-		s := alloc(int(numLeaves))    //nolint:gosec // G115: numLeaves bounded by serialized data
-		if cap(s) >= int(numLeaves) { //nolint:gosec // G115
-			st.Nodes = s[:numLeaves]
-		} else {
-			st.Nodes = make([]Node, numLeaves)
-		}
-	} else {
-		st.Nodes = make([]Node, numLeaves)
+	// Obtain backing storage from caller or fall back to make, for at most
+	// maxNodePrealloc nodes up front. A larger count never reaches alloc and grows
+	// below as nodes arrive. The make fallback also catches an allocator that
+	// returned a too-small slice — safer than panicking.
+	prealloc := min(numLeavesInt, maxNodePrealloc)
+
+	var nodes []Node
+	if alloc != nil && numLeavesInt <= maxNodePrealloc {
+		nodes = alloc(numLeavesInt)
 	}
 
+	if cap(nodes) < prealloc {
+		nodes = make([]Node, prealloc)
+	}
+
+	// An allocator may hand back a slice of any length; only its capacity counts.
+	// Set st.Nodes before the loop so a caller that releases Nodes after an error
+	// still gets an allocator-supplied slice back (ReleaseNodes returns the full cap).
+	nodes = nodes[:prealloc]
+	st.Nodes = nodes
+
 	bytes48 := make([]byte, 48)
-	for i := uint64(0); i < numLeaves; i++ {
+	for i := 0; i < numLeavesInt; i++ {
 		// read all the node data in 1 go
-		if _, err := io.ReadFull(buf, bytes48); err != nil {
+		if _, err = io.ReadFull(buf, bytes48); err != nil {
 			return fmt.Errorf("unable to read node: %w", err)
 		}
 
-		st.Nodes[i].Hash = chainhash.Hash(bytes48[:32])
-		st.Nodes[i].Fee = binary.LittleEndian.Uint64(bytes48[32:40])
-		st.Nodes[i].SizeInBytes = binary.LittleEndian.Uint64(bytes48[40:48])
+		if i == len(nodes) {
+			// Only a count above maxNodePrealloc gets here: grow as the nodes arrive.
+			nodes = slices.Grow(nodes, 1)
+			nodes = nodes[:min(cap(nodes), numLeavesInt)]
+		}
+
+		nodes[i].Hash = chainhash.Hash(bytes48[:32])
+		nodes[i].Fee = binary.LittleEndian.Uint64(bytes48[32:40])
+		nodes[i].SizeInBytes = binary.LittleEndian.Uint64(bytes48[40:48])
 	}
+
+	st.Nodes = nodes
 
 	return nil
 }

@@ -103,6 +103,11 @@ var (
 	// byte size) and the unsafe.Slice length. Bounded by math.MaxInt/nodeSize.
 	ErrCapacityTooLarge = errors.New("mmap capacity too large")
 
+	// ErrMmapUnsupported is returned on platforms without an mmap backend. It
+	// marks a failure of the mmap machinery rather than of the subtree bytes, so
+	// a caller can fall back to a heap-backed load.
+	ErrMmapUnsupported = errors.New("mmap is not supported on this platform")
+
 	// ErrMmapPanic is returned when an unsafe or mmap operation panics. The
 	// panic is recovered and converted into an ordinary error rather than being
 	// allowed to escape into the caller's process.
@@ -110,13 +115,14 @@ var (
 
 	// ErrNodeCountExceedsInput is returned when a serialized subtree declares more
 	// nodes than the reader could possibly contain. It stops a hostile count from
-	// driving a huge scratch-file mmap before a single node has been read, when the
-	// reader's remaining size is knowable.
+	// sizing a huge node array (heap slice or scratch-file mmap) before a single
+	// node has been read, when the reader's remaining size is knowable.
 	ErrNodeCountExceedsInput = errors.New("declared node count exceeds reader size")
 
-	// ErrNodeCountExceedsLimit is returned when a non-seekable reader declares more
-	// nodes than maxMmapDeserializeNodes. The length of such a reader cannot be
-	// known in advance, so a practical ceiling stops a hostile stream from driving
-	// a multi-terabyte mmap before any node is read.
-	ErrNodeCountExceedsLimit = errors.New("declared node count exceeds mmap deserialization limit")
+	// ErrNodeCountExceedsLimit is returned when a reader declares more nodes than
+	// maxDeserializeNodes. A non-seekable reader's length cannot be known in
+	// advance, and a seekable one can report a sparse file's logical size, so a
+	// practical ceiling stops a hostile stream from driving a multi-terabyte heap
+	// allocation or mmap before any node is read.
+	ErrNodeCountExceedsLimit = errors.New("declared node count exceeds deserialization limit")
 )
