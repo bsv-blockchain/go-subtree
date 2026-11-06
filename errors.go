@@ -65,6 +65,10 @@ var (
 
 // Serialization errors
 var (
+	// ErrInvalidLockTimeMetadata is returned for malformed or mismatched
+	// optional transaction locktime metadata.
+	ErrInvalidLockTimeMetadata = errors.New("invalid locktime metadata")
+
 	// ErrCannotSerializeSubtreeNotSet is returned when cannot serialize because subtree is not set
 	ErrCannotSerializeSubtreeNotSet = errors.New("cannot serialize, subtree is not set")
 
