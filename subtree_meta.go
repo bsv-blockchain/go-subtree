@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/bsv-blockchain/go-bt/v2"
 	"github.com/bsv-blockchain/go-bt/v2/chainhash"
@@ -17,6 +18,14 @@ type Meta struct {
 	Subtree *Subtree
 	// TxInpoints is a lookup of the parent tx inpoints for each node in the subtree
 	TxInpoints []TxInpoints
+
+	// LockTimes is a complete sparse table of raw nonzero transaction locktimes,
+	// ordered by node index. Nil means unavailable; non-nil empty means every
+	// real transaction was examined and all locktimes are zero. Callers must
+	// establish completeness explicitly, including after restart or cache loads.
+	// Rebuild or clear this table if the subtree's node list changes. This is
+	// transaction-derived cache data, not authenticated by the subtree root.
+	LockTimes []TxLockTime
 
 	// RootHash is the hash of the root node of the subtree
 	rootHash chainhash.Hash
@@ -189,7 +198,17 @@ func (s *Meta) Serialize() ([]byte, error) {
 
 	// Size the buffer exactly: a growing buffer copied a full subtree's meta
 	// (around 100 MB) a dozen times.
-	buf := bytes.NewBuffer(make([]byte, 0, s.serializedSize(subtreeLen)))
+	lockTimeSize, err := s.lockTimeSerializedSize(subtreeLen)
+	if err != nil {
+		return nil, err
+	}
+
+	size := s.serializedSize(subtreeLen)
+	if size > math.MaxInt-lockTimeSize {
+		return nil, fmt.Errorf("cannot serialize, locktime trailer overflows buffer size: %w", ErrInvalidLockTimeMetadata)
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 0, size+lockTimeSize))
 
 	s.rootHash = *s.Subtree.RootHash()
 
@@ -200,6 +219,12 @@ func (s *Meta) Serialize() ([]byte, error) {
 
 	if err = s.serializeTxInpoints(buf); err != nil {
 		return nil, err
+	}
+
+	if s.LockTimes != nil {
+		if err = s.serializeLockTimes(buf); err != nil {
+			return nil, err
+		}
 	}
 
 	return buf.Bytes(), nil

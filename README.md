@@ -127,6 +127,64 @@ go get -u github.com/bsv-blockchain/go-subtree
 - **Benchmarks** – Check the latest numbers in the [benchmark results](#benchmark-results)
 - **Test Suite** – Review both the [unit tests](subtree_test.go) and [fuzz tests](subtree_fuzz_test.go) (powered by [`testify`](https://github.com/stretchr/testify))
 
+### Optional transaction locktimes
+
+`Meta.LockTimes` optionally carries a complete sparse table of transaction
+`nLockTime` values. Leave it `nil` when the information is unavailable; assign
+`[]subtree.TxLockTime{}` only after examining every real transaction and finding
+all locktimes zero. For nonzero values, supply entries in ascending node order:
+
+```go
+meta.LockTimes = []subtree.TxLockTime{
+    {Index: 5, LockTime: 800000, Enabled: true},
+    {Index: 12, LockTime: 1700000000, Enabled: false},
+}
+```
+
+`Index` identifies a transaction in `Subtree.Nodes`. Include every nonzero raw
+value, even when disabled. `Enabled` is true if any input's sequence number is
+not `0xffffffff`. Zero locktimes need no entry or sequence inspection. Collect
+entries during existing transaction processing; no extra subtree pass or dense
+per-transaction array is needed. Exclude the synthetic coinbase placeholder;
+validate the actual coinbase transaction separately.
+
+`Serialize` leaves the legacy bytes unchanged when the table is nil. Otherwise
+it appends `SLT1`, a little-endian uint32 entry count, and entries containing a
+uint32 node index, uint32 raw locktime, and one flags byte (bit 0 is `Enabled`,
+other bits must be zero). A known-zero table adds eight bytes and no entry
+allocations; each exception adds nine bytes.
+
+Read the optional table with `NewSubtreeMetaFromBytesWithLockTimes` or
+`NewSubtreeMetaFromReaderWithLockTimes`. These validate the root and node count
+against the supplied subtree and reject malformed or surplus trailing data.
+The new streaming reader requires one finite blob ending at EOF; limit a
+transport to one frame before adding buffering. If the frame promises an exact
+size, retain an `*io.LimitedReader` and verify `N == 0` after decoding. The
+existing constructors keep their legacy behavior, accepting but ignoring the
+trailer. Reading and reserializing through those constructors discards it.
+
+A complete table belongs to a fixed node ordering. Clear or rebuild it when
+nodes change. Preserve explicit completeness information through caches and
+restarts; an empty collection of exceptions alone does not prove completeness.
+Callers populating only inpoints do not automatically populate locktimes.
+
+For absolute transaction finality, skip disabled entries and require candidate
+height **greater than** enabled locktimes below 500,000,000. For other enabled
+values, require the applicable consensus comparison time **greater than** the
+locktime: candidate-parent median time past after BIP113, candidate block time
+for earlier blocks. Always use the candidate block's branch and era, rather
+than a cached finality result. Relative sequence locks and script checks remain
+separate.
+
+The subtree root does not authenticate this metadata. Verify peer-supplied
+values and completeness from transaction data before using either an empty or
+populated table for consensus checks. Legacy blobs decode with a nil table;
+regenerate verified metadata or fall back to transaction finality checks.
+Unavailable source data is not evidence that the block is invalid. Capture the
+raw transaction's `LockTime`, rather than store fields that may encode maturity
+or other lock semantics. Teranode producer and block-validation integration is
+a separate change; this library does not perform block finality validation.
+
 <br/>
 
 <details>
